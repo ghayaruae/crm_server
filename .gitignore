@@ -1,0 +1,48 @@
+# Node.js dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Directory for uploaded files (optional if you store in /public)
+public/uploads/
+public/business/documents/
+
+# dotenv environment variables
+.env
+.env.local
+.env.*.local
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# IDE/editor configs
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Optional: coverage, dist, and build folders
+coverage/
+dist/
+build/
+
+# Optional: PM2 process file
+*.pm2
+
+# Ignore compiled files (if using TypeScript)
+*.tsbuildinfo
+
+# Ignore uploads if you're storing in a temp folder
+/tmp
