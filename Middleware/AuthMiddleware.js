@@ -19,6 +19,9 @@ const ValidateHeader = async (header) => {
 
 
 exports.AdminAuth = async (req, res, next) => {
+
+    console.log(req.headers, "its my headers")
+
     const validate = await ValidateHeader(req.headers);
     if (!validate.success) return res.json({ success: false, message: validate.message });
 

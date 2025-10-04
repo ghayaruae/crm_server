@@ -3,15 +3,21 @@ const app = express();
 const cors = require('cors');
 const path = require('path');
 require("dotenv").config();
+const body_parser = require("body-parser")
+
+app.use(body_parser.json());
+app.use(body_parser.urlencoded({ extended: true, }));
 
 app.use(cors({ origin: '*' }));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.get("/", (req, res) => { res.json("Working") });
 
 
-const UsersRoutes = require("./Router/UsersRouter")
+const UsersRoutes = require("./Router/UsersRouter");
+const BusinessRouter = require("./Router/BusinessRouter");
 
 app.use("/Users", UsersRoutes)
+app.use("/Business", BusinessRouter)
 
 
 app.listen(process.env.PORT, (error) => {

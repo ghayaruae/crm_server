@@ -2,7 +2,7 @@ exports.global = {
     get current_date() {
         return new Date()
     },
-    'base_server_file_url': 'https://b2bapi.ghayar.com/',
+    'base_server_file_url': 'https://crmapi.ghayar.com/',
 };
 
 exports.statusOptions = [
