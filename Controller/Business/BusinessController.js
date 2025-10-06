@@ -326,31 +326,37 @@ exports.GetBusinessDocuments = async (req, res) => {
             });
         }
 
+        // Validate that this business belongs to the salesman
         const [businessRows] = await pool.query(
-
-            `SELECT *,
-             CONCAT('${global.b2b_base_server_file_url}public/business/documents/', document_path) AS business_document_url
-             FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            `SELECT business_id FROM business WHERE business_id = ? AND business_salesman_id = ?`,
             [business_id, business_salesman_id]
         );
 
         if (businessRows.length === 0) {
-            return res.json({ success: false, message: "No business found" });
+            return res.json({ success: false, message: "No business found for this salesman" });
         }
 
-        const [rows] = await pool.query(
-            `SELECT * FROM business__documents 
+        // Fetch documents for the business with full URL
+        const [documentRows] = await pool.query(
+            `SELECT *,
+             CONCAT('${global.b2b_base_server_file_url}public/business/documents/', document_path) AS business_document_url
+             FROM business__documents 
              WHERE business_id = ?`,
             [business_id]
         );
 
-        return res.json({ success: true, data: rows });
+        return res.json({ success: true, data: documentRows });
 
     } catch (error) {
-        console.log("Get Business Documents error : ", error);
-        return res.json({ success: false, message: "Internal server error : ", error });
+        console.error("GetBusinessDocuments error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
     }
-}
+};
+
 
 exports.GetBusinessBrands = async (req, res) => {
     try {
