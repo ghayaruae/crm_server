@@ -1,9 +1,15 @@
 const pool = require("../../Config/db_pool");
 const { PaginationQuery } = require("../Helper/QueryHelper");
 
+
+
+// ------------- business orders api // ------------- //
 exports.GetBusinesses = async (req, res) => {
     try {
-        const { limit, page, business_salesman_id } = req.headers;
+        const business_salesman_id = req.headers['business-salesman-id'];
+        const { limit, page, } = req.query;
+
+        console.log("business_salesman_id ===>", business_salesman_id)
 
         let query_count = `SELECT COUNT(*) AS total_records
          FROM business`
@@ -38,7 +44,7 @@ exports.GetBusinesses = async (req, res) => {
 
 exports.GetBusinessInfo = async (req, res) => {
     try {
-        const { business_salesman_id } = req.headers;
+        const business_salesman_id = req.headers['business-salesman-id'];
         const { business_id } = req.query;
 
         if (!business_salesman_id || !business_id) {
@@ -67,85 +73,201 @@ exports.GetBusinessInfo = async (req, res) => {
     }
 };
 
-
-// ------------- business orders api // -------------
-exports.GetBusinessOrders = async (req, res) => {
+exports.GetBusinessDashboard = async (req, res) => {
     try {
-        const { business_salesman_id } = req.headers;
-        const { limit, page, business_name, type, keyword, status, from_date, to_date } = req.query;
+        const { business_id } = req.query;
+        const business_salesman_id = req.headers['business-salesman-id'];
 
-        if (!business_salesman_id) {
-            return res.json({ success: false, message: "business_salesman_id is required" });
+        if (!business_id) {
+            return res.status(400).json({ success: false, message: "business_id is required" });
         }
 
+        // Check if business exists & belongs to salesman
+        const [businessRows] = await pool.query(
+            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            [business_id, business_salesman_id]
+        );
+
+        if (businessRows.length === 0) {
+            return res.status(404).json({ success: false, message: "Business not found or not linked to this salesman" });
+        }
+
+        // Queries
+        const total_orders_query = `
+            SELECT COUNT(*) AS total_orders 
+            FROM business__orders 
+            WHERE business_order_business_id = ?`;
+
+        const delivered_orders_query = `
+            SELECT COUNT(*) AS total_delivered_orders 
+            FROM business__orders 
+            WHERE business_order_status = 5 
+            AND business_order_business_id = ?`;
+
+        const pending_orders_query = `
+            SELECT COUNT(*) AS total_pending_orders 
+            FROM business__orders 
+            WHERE business_order_status = 0 
+            AND business_order_business_id = ?`;
+
+        const cancelled_orders_query = `
+            SELECT COUNT(*) AS total_cancelled_orders 
+            FROM business__orders 
+            WHERE business_order_status = 6 
+            AND business_order_business_id = ?`;
+
+        const total_credit_query = `
+            SELECT SUM(business_credit_limit) AS total_credit_limit 
+            FROM business
+            WHERE business_id = ?`;
+
+        const used_credit_query = `
+            SELECT SUM(business_credit_limit - business_credit_balance) AS total_used_credit_amount 
+            FROM business
+            WHERE business_id = ?`;
+
+        const remaining_credit_query = `
+            SELECT SUM(business_credit_balance) AS total_remaining_credit 
+            FROM business
+            WHERE business_id = ?`;
+
+        const reward_points_query = `
+            SELECT SUM(business_reward_points_balance) AS total_reward_points 
+            FROM business
+            WHERE business_id = ?`;
+
+        // Run all queries in parallel
+        const [
+            [totalOrdersRows],
+            [deliveredOrdersRows],
+            [pendingOrdersRows],
+            [cancelledOrdersRows],
+            [totalCreditRows],
+            [usedCreditRows],
+            [remainingCreditRows],
+            [rewardPointsRows]
+        ] = await Promise.all([
+            pool.query(total_orders_query, [business_id]),
+            pool.query(delivered_orders_query, [business_id]),
+            pool.query(pending_orders_query, [business_id]),
+            pool.query(cancelled_orders_query, [business_id]),
+            pool.query(total_credit_query, [business_id]),
+            pool.query(used_credit_query, [business_id]),
+            pool.query(remaining_credit_query, [business_id]),
+            pool.query(reward_points_query, [business_id]),
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                total_orders: totalOrdersRows[0].total_orders || 0,
+                total_delivered_orders: deliveredOrdersRows[0].total_delivered_orders || 0,
+                total_pending_orders: pendingOrdersRows[0].total_pending_orders || 0,
+                total_cancelled_orders: cancelledOrdersRows[0].total_cancelled_orders || 0,
+                total_credit_limit: totalCreditRows[0].total_credit_limit || 0,
+                total_used_credit_amount: usedCreditRows[0].total_used_credit_amount || 0,
+                total_remaining_credit: remainingCreditRows[0].total_remaining_credit || 0,
+                total_reward_points: rewardPointsRows[0].total_reward_points || 0
+            }
+        });
+
+    } catch (error) {
+        console.error("Error in GetBusinessDashboard:", error);
+        return res.status(500).json({ success: false, message: "Internal server error", error });
+    }
+};
+
+
+// ------------- business orders api // ------------- //
+exports.GetBusinessOrders = async (req, res) => {
+    try {
+        const business_salesman_id = req.headers['business-salesman-id'];
+        const { limit, page, business_name, keyword, status, from_date, to_date } = req.query;
+
+        if (!business_salesman_id) {
+            return res.status(400).json({
+                success: false,
+                message: "business_salesman_id is required"
+            });
+        }
+
+        // Step 1: Get business IDs
         const [businessRows] = await pool.query(
             `SELECT business_id FROM business WHERE business_salesman_id = ?`,
             [business_salesman_id]
         );
 
         if (businessRows.length === 0) {
-            return res.json({ success: false, message: "No businesses found for this salesman" });
+            return res.json({
+                success: false,
+                message: "No businesses found for this salesman"
+            });
         }
 
         const businessIds = businessRows.map(b => b.business_id);
+        const placeholders = businessIds.map(() => '?').join(',');
 
+        // Base queries
         let query_count = `
-            SELECT COUNT(*) as total_records
-            FROM business__orders
-            LEFT JOIN business ON business__orders.business_id = business.business_id
-            WHERE business__orders.business_id IN (?)
-        `;
+      SELECT COUNT(*) as total_records
+      FROM business__orders
+      LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+      WHERE business__orders.business_order_business_id IN (${placeholders})
+    `;
 
         let query = `
-            SELECT business__orders.*, business.business_name
-            FROM business__orders
-            LEFT JOIN business ON business__orders.business_id = business.business_id
-            WHERE business__orders.business_id IN (?)
-        `;
+      SELECT business__orders.*, business.business_name
+      FROM business__orders
+      LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+      WHERE business__orders.business_order_business_id IN (${placeholders})
+    `;
 
-        let conditionValue = [businessIds];
-        let conditionCols = [];
+        // Conditions
+        let conditionValue = [...businessIds];
+        let conditions = [];
 
         if (business_name) {
-            conditionCols.push(`business.business_name = ?`);
-            conditionValue.push(business_name);
-        }
-
-        if (type) {
-            conditionCols.push(`business__orders.business_order_status = ?`);
-            conditionValue.push(type);
+            conditions.push(`business.business_name LIKE ?`);
+            conditionValue.push(`%${business_name}%`);
         }
 
         if (keyword) {
-            conditionCols.push(`business__orders.secret_order_id LIKE ?`);
+            conditions.push(`business__orders.secret_order_id LIKE ?`);
             conditionValue.push(`%${keyword}%`);
         }
 
         if (status) {
-            conditionCols.push(`business__orders.business_order_status = ?`);
+            conditions.push(`business__orders.business_order_status = ?`);
             conditionValue.push(status);
         }
 
         if (from_date && to_date) {
-            conditionCols.push(`DATE(business__orders.business_order_date) BETWEEN ? AND ?`);
+            conditions.push(`DATE(business__orders.business_order_date) BETWEEN ? AND ?`);
             conditionValue.push(from_date, to_date);
         }
 
-        if (conditionCols.length > 0) {
-            const conditionStr = " AND " + conditionCols.join(" AND ");
+        // Add conditions
+        if (conditions.length > 0) {
+            const conditionStr = " AND " + conditions.join(" AND ");
             query += conditionStr;
             query_count += conditionStr;
         }
 
         query += ` ORDER BY business__orders.business_order_id DESC LIMIT ?, ?`;
 
+        const limitNum = parseInt(limit) || 10;
+        const pageNum = parseInt(page) || 1;
 
-        const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
+        const response = await PaginationQuery(query_count, query, conditionValue, limitNum, pageNum);
         return res.status(200).json(response);
 
     } catch (error) {
-        console.error("GetBusinessOrders error : ", error);
-        return res.status(500).json({ success: false, message: "Internal server error", error });
+        console.error("GetBusinessOrders SQL Error:", error.sqlMessage || error.message, error.sql);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
     }
 };
 
