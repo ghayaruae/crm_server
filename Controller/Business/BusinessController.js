@@ -1,4 +1,5 @@
 const pool = require("../../Config/db_pool");
+const { global } = require("../../Config/global");
 const { PaginationQuery } = require("../Helper/QueryHelper");
 
 
@@ -326,7 +327,10 @@ exports.GetBusinessDocuments = async (req, res) => {
         }
 
         const [businessRows] = await pool.query(
-            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+
+            `SELECT *,
+             CONCAT('${global.b2b_base_server_file_url}public/business/documents/', document_path) AS business_document_url
+             FROM business WHERE business_id = ? AND business_salesman_id = ?`,
             [business_id, business_salesman_id]
         );
 
@@ -382,7 +386,7 @@ exports.GetBusinessBrands = async (req, res) => {
     }
 }
 
-exports.GetBusinessOrders = async (req, res) => {
+exports.GetBusinessOrdersList = async (req, res) => {
     try {
         const business_salesman_id = req.headers['business-salesman-id'];
         const { business_id } = req.query;

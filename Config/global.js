@@ -3,6 +3,7 @@ exports.global = {
         return new Date()
     },
     'base_server_file_url': 'https://crmapi.ghayar.com/',
+    'b2b_base_server_file_url': 'https://b2bapi.ghayar.com/',
 };
 
 exports.statusOptions = [
