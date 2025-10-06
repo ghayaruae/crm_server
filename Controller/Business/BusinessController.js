@@ -73,111 +73,6 @@ exports.GetBusinessInfo = async (req, res) => {
     }
 };
 
-exports.GetBusinessDashboard = async (req, res) => {
-    try {
-        const { business_id } = req.query;
-        const business_salesman_id = req.headers['business-salesman-id'];
-
-        if (!business_id) {
-            return res.status(400).json({ success: false, message: "business_id is required" });
-        }
-
-        // Check if business exists & belongs to salesman
-        const [businessRows] = await pool.query(
-            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
-            [business_id, business_salesman_id]
-        );
-
-        if (businessRows.length === 0) {
-            return res.status(404).json({ success: false, message: "Business not found or not linked to this salesman" });
-        }
-
-        // Queries
-        const total_orders_query = `
-            SELECT COUNT(*) AS total_orders 
-            FROM business__orders 
-            WHERE business_order_business_id = ?`;
-
-        const delivered_orders_query = `
-            SELECT COUNT(*) AS total_delivered_orders 
-            FROM business__orders 
-            WHERE business_order_status = 5 
-            AND business_order_business_id = ?`;
-
-        const pending_orders_query = `
-            SELECT COUNT(*) AS total_pending_orders 
-            FROM business__orders 
-            WHERE business_order_status = 0 
-            AND business_order_business_id = ?`;
-
-        const cancelled_orders_query = `
-            SELECT COUNT(*) AS total_cancelled_orders 
-            FROM business__orders 
-            WHERE business_order_status = 6 
-            AND business_order_business_id = ?`;
-
-        const total_credit_query = `
-            SELECT SUM(business_credit_limit) AS total_credit_limit 
-            FROM business
-            WHERE business_id = ?`;
-
-        const used_credit_query = `
-            SELECT SUM(business_credit_limit - business_credit_balance) AS total_used_credit_amount 
-            FROM business
-            WHERE business_id = ?`;
-
-        const remaining_credit_query = `
-            SELECT SUM(business_credit_balance) AS total_remaining_credit 
-            FROM business
-            WHERE business_id = ?`;
-
-        const reward_points_query = `
-            SELECT SUM(business_reward_points_balance) AS total_reward_points 
-            FROM business
-            WHERE business_id = ?`;
-
-        // Run all queries in parallel
-        const [
-            [totalOrdersRows],
-            [deliveredOrdersRows],
-            [pendingOrdersRows],
-            [cancelledOrdersRows],
-            [totalCreditRows],
-            [usedCreditRows],
-            [remainingCreditRows],
-            [rewardPointsRows]
-        ] = await Promise.all([
-            pool.query(total_orders_query, [business_id]),
-            pool.query(delivered_orders_query, [business_id]),
-            pool.query(pending_orders_query, [business_id]),
-            pool.query(cancelled_orders_query, [business_id]),
-            pool.query(total_credit_query, [business_id]),
-            pool.query(used_credit_query, [business_id]),
-            pool.query(remaining_credit_query, [business_id]),
-            pool.query(reward_points_query, [business_id]),
-        ]);
-
-        return res.status(200).json({
-            success: true,
-            data: {
-                total_orders: totalOrdersRows[0].total_orders || 0,
-                total_delivered_orders: deliveredOrdersRows[0].total_delivered_orders || 0,
-                total_pending_orders: pendingOrdersRows[0].total_pending_orders || 0,
-                total_cancelled_orders: cancelledOrdersRows[0].total_cancelled_orders || 0,
-                total_credit_limit: totalCreditRows[0].total_credit_limit || 0,
-                total_used_credit_amount: usedCreditRows[0].total_used_credit_amount || 0,
-                total_remaining_credit: remainingCreditRows[0].total_remaining_credit || 0,
-                total_reward_points: rewardPointsRows[0].total_reward_points || 0
-            }
-        });
-
-    } catch (error) {
-        console.error("Error in GetBusinessDashboard:", error);
-        return res.status(500).json({ success: false, message: "Internal server error", error });
-    }
-};
-
-
 // ------------- business orders api // ------------- //
 exports.GetBusinessOrders = async (req, res) => {
     try {
@@ -311,3 +206,314 @@ exports.GetOrderInfo = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal server error", error });
     }
 };
+
+
+// ------------- business Details wizard  // ------------- //
+exports.GetBusinessDashboard = async (req, res) => {
+    try {
+        const { business_id } = req.query;
+        const business_salesman_id = req.headers['business-salesman-id'];
+
+        if (!business_id) {
+            return res.status(400).json({ success: false, message: "business_id is required" });
+        }
+
+        // Check if business exists & belongs to salesman
+        const [businessRows] = await pool.query(
+            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            [business_id, business_salesman_id]
+        );
+
+        if (businessRows.length === 0) {
+            return res.status(404).json({ success: false, message: "Business not found or not linked to this salesman" });
+        }
+
+        // Queries
+        const total_orders_query = `
+            SELECT COUNT(*) AS total_orders 
+            FROM business__orders 
+            WHERE business_order_business_id = ?`;
+
+        const delivered_orders_query = `
+            SELECT COUNT(*) AS total_delivered_orders 
+            FROM business__orders 
+            WHERE business_order_status = 5 
+            AND business_order_business_id = ?`;
+
+        const pending_orders_query = `
+            SELECT COUNT(*) AS total_pending_orders 
+            FROM business__orders 
+            WHERE business_order_status = 0 
+            AND business_order_business_id = ?`;
+
+        const cancelled_orders_query = `
+            SELECT COUNT(*) AS total_cancelled_orders 
+            FROM business__orders 
+            WHERE business_order_status = 6 
+            AND business_order_business_id = ?`;
+
+        const total_credit_query = `
+            SELECT SUM(business_credit_limit) AS total_credit_limit 
+            FROM business
+            WHERE business_id = ?`;
+
+        const used_credit_query = `
+            SELECT SUM(business_credit_limit - business_credit_balance) AS total_used_credit_amount 
+            FROM business
+            WHERE business_id = ?`;
+
+        const remaining_credit_query = `
+            SELECT SUM(business_credit_balance) AS total_remaining_credit 
+            FROM business
+            WHERE business_id = ?`;
+
+        const reward_points_query = `
+            SELECT SUM(business_reward_points_balance) AS total_reward_points 
+            FROM business
+            WHERE business_id = ?`;
+
+        // Run all queries in parallel
+        const [
+            [totalOrdersRows],
+            [deliveredOrdersRows],
+            [pendingOrdersRows],
+            [cancelledOrdersRows],
+            [totalCreditRows],
+            [usedCreditRows],
+            [remainingCreditRows],
+            [rewardPointsRows]
+        ] = await Promise.all([
+            pool.query(total_orders_query, [business_id]),
+            pool.query(delivered_orders_query, [business_id]),
+            pool.query(pending_orders_query, [business_id]),
+            pool.query(cancelled_orders_query, [business_id]),
+            pool.query(total_credit_query, [business_id]),
+            pool.query(used_credit_query, [business_id]),
+            pool.query(remaining_credit_query, [business_id]),
+            pool.query(reward_points_query, [business_id]),
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                total_orders: totalOrdersRows[0].total_orders || 0,
+                total_delivered_orders: deliveredOrdersRows[0].total_delivered_orders || 0,
+                total_pending_orders: pendingOrdersRows[0].total_pending_orders || 0,
+                total_cancelled_orders: cancelledOrdersRows[0].total_cancelled_orders || 0,
+                total_credit_limit: totalCreditRows[0].total_credit_limit || 0,
+                total_used_credit_amount: usedCreditRows[0].total_used_credit_amount || 0,
+                total_remaining_credit: remainingCreditRows[0].total_remaining_credit || 0,
+                total_reward_points: rewardPointsRows[0].total_reward_points || 0
+            }
+        });
+
+    } catch (error) {
+        console.error("Error in GetBusinessDashboard:", error);
+        return res.status(500).json({ success: false, message: "Internal server error", error });
+    }
+};
+
+exports.GetBusinessDocuments = async (req, res) => {
+    try {
+        const business_salesman_id = req.headers['business-salesman-id'];
+        const { business_id } = req.query;
+
+        if (!business_salesman_id || !business_id) {
+            return res.status(400).json({
+                success: false,
+                message: "business_salesman_id and business_id are required"
+            });
+        }
+
+        const [businessRows] = await pool.query(
+            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            [business_id, business_salesman_id]
+        );
+
+        if (businessRows.length === 0) {
+            return res.json({ success: false, message: "No business found" });
+        }
+
+        const [rows] = await pool.query(
+            `SELECT * FROM business__documents 
+             WHERE business_id = ?`,
+            [business_id]
+        );
+
+        return res.json({ success: true, data: rows });
+
+    } catch (error) {
+        console.log("Get Business Documents error : ", error);
+        return res.json({ success: false, message: "Internal server error : ", error });
+    }
+}
+
+exports.GetBusinessBrands = async (req, res) => {
+    try {
+        const business_salesman_id = req.headers['business-salesman-id'];
+        const { business_id } = req.query;
+
+        if (!business_salesman_id || !business_id) {
+            return res.status(400).json({
+                success: false,
+                message: "business_salesman_id and business_id are required"
+            });
+        }
+        const [businessRows] = await pool.query(
+            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            [business_id, business_salesman_id]
+        );
+
+        if (businessRows.length === 0) {
+            return res.json({ success: false, message: "No business found" });
+        }
+
+        const [rows] = await pool.query(
+            `SELECT * FROM business__brands 
+             WHERE business_id = ?`,
+            [business_id]
+        );
+
+        return res.json({ success: true, data: rows });
+
+    } catch (error) {
+        console.log("Get Business Brands error : ", error);
+        return res.json({ success: false, message: "Internal server error : ", error });
+    }
+}
+
+exports.GetBusinessOrders = async (req, res) => {
+    try {
+        const business_salesman_id = req.headers['business-salesman-id'];
+        const { business_id } = req.query;
+
+        if (!business_salesman_id || !business_id) {
+            return res.status(400).json({
+                success: false,
+                message: "business_salesman_id and business_id are required"
+            });
+        }
+
+        const [businessRows] = await pool.query(
+            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            [business_id, business_salesman_id]
+        );
+
+        if (businessRows.length === 0) {
+            return res.json({ success: false, message: "No business found" });
+        }
+
+        const [rows] = await pool.query(
+            `SELECT * FROM business__orders 
+             WHERE business_order_business_id = ?`,
+            [business_id]
+        );
+
+        return res.json({ success: true, data: rows });
+
+    } catch (error) {
+        console.log("Get Business Orders error : ", error);
+        return res.json({ success: false, message: "Internal server error : ", error });
+    }
+}
+
+exports.GetBusinessCrditLimit = async (req, res) => {
+    try {
+        const business_salesman_id = req.headers['business-salesman-id'];
+        const { business_id } = req.query;
+
+        if (!business_salesman_id || !business_id) {
+            return res.status(400).json({
+                success: false,
+                message: "business_salesman_id and business_id are required"
+            });
+        }
+
+        const [businessRows] = await pool.query(
+            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            [business_id, business_salesman_id]
+        );
+
+        if (businessRows.length === 0) {
+            return res.json({ success: false, message: "No business found" });
+        }
+
+        let query = `
+            SELECT 
+                rcl.*,
+                COALESCE(b.business_credit_balance, 0) AS existing_credit_limit,
+                reqUser.business_admin_user_name AS requested_by_name,
+                apprUser.business_admin_user_name AS approved_by_name
+            FROM business__requests_credit_limit rcl
+            LEFT JOIN business b 
+                ON rcl.business_id = b.business_id
+            LEFT JOIN business__admin_users reqUser 
+                ON rcl.request_by = reqUser.business_admin_user_id
+            LEFT JOIN business__admin_users apprUser 
+                ON rcl.approved_by = apprUser.business_admin_user_id
+            WHERE rcl.business_id = ?
+            ORDER BY rcl.business_request_credit_limit_id DESC
+        `;
+
+        // ✅ Run query
+        const [rows] = await pool.query(query, [business_id]);
+
+        return res.json({ success: true, data: rows });
+
+    } catch (error) {
+        console.log("Get Business Credit Limit error : ", error);
+        return res.json({ success: false, message: "Internal server error : ", error });
+    }
+}
+
+exports.GetBusinessDueDays = async (req, res) => {
+    try {
+        const business_salesman_id = req.headers['business-salesman-id'];
+        const { business_id } = req.query;
+
+        if (!business_salesman_id || !business_id) {
+            return res.status(400).json({
+                success: false,
+                message: "business_salesman_id and business_id are required"
+            });
+        }
+
+        const [businessRows] = await pool.query(
+            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            [business_id, business_salesman_id]
+        );
+
+        if (businessRows.length === 0) {
+            return res.json({ success: false, message: "No business found" });
+        }
+
+        let query = `
+            SELECT 
+                rcl.*,
+                COALESCE(b.due_days, 0) AS existing_due_days,
+                reqUser.business_admin_user_name AS requested_by_name,
+                apprUser.business_admin_user_name AS approved_by_name
+            FROM business__requests_due_days rcl
+            LEFT JOIN business b 
+                ON rcl.business_id = b.business_id
+            LEFT JOIN business__admin_users reqUser 
+                ON rcl.request_by = reqUser.business_admin_user_id
+            LEFT JOIN business__admin_users apprUser 
+                ON rcl.approved_by = apprUser.business_admin_user_id
+            WHERE rcl.business_id = ?
+            ORDER BY rcl.business_request_due_days_id DESC
+        `;
+
+        // ✅ Run query
+        const [rows] = await pool.query(query, [business_id]);
+
+        return res.json({ success: true, data: rows });
+
+    } catch (error) {
+        console.log("Get Business Due Days error : ", error);
+        return res.json({ success: false, message: "Internal server error : ", error });
+    }
+}
+
+// ------------- business Details wizard  // ------------- //
+
