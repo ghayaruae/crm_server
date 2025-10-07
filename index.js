@@ -15,9 +15,11 @@ app.get("/", (req, res) => { res.json("Working") });
 
 const UsersRoutes = require("./Router/UsersRouter");
 const BusinessRouter = require("./Router/BusinessRouter");
+const ReportsRouter = require("./Router/ReportsRouter");
 
 app.use("/Users", UsersRoutes)
 app.use("/Business", BusinessRouter)
+app.use("/Reports", ReportsRouter)
 
 
 app.listen(process.env.PORT, (error) => {
