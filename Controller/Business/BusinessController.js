@@ -525,5 +525,32 @@ exports.GetBusinessDueDays = async (req, res) => {
     }
 }
 
-// ------------- business Details wizard  // ------------- //
+// ------------- business Details wizard  ------------- //
 
+
+// ------------- business Details wizard  ------------- //
+exports.GetOrderTimeLine = async (req, res) => {
+    try {
+        const { business_order_id } = req.query;
+
+        if (!business_order_id) {
+            return res.status(400).json({ success: false, message: 'Missing business_order_id' });
+        }
+
+        const [rows] = await pool.query(
+            `SELECT 
+             business__orders_timeline.*,
+            business__admin_users.business_admin_user_name AS action_by_name
+            FROM business__orders_timeline
+            LEFT JOIN business__admin_users ON business__orders_timeline.business_order_action_by = business__admin_users.business_admin_user_id
+            WHERE business_order_id = ?
+            ORDER BY business_order_timeline_datetime DESC`,
+            [business_order_id]);
+
+        return res.status(200).json({ success: true, data: rows });
+
+    } catch (error) {
+        console.log("error : ", error)
+        return res.json({ success: false, message: "Internal server error ", error })
+    }
+}
