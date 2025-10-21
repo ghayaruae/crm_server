@@ -16,10 +16,12 @@ app.get("/", (req, res) => { res.json("Working") });
 const UsersRoutes = require("./Router/UsersRouter");
 const BusinessRouter = require("./Router/BusinessRouter");
 const ReportsRouter = require("./Router/ReportsRouter");
+const DashboardRouter = require("./Router/DashboardRouter");
 
 app.use("/Users", UsersRoutes)
 app.use("/Business", BusinessRouter)
 app.use("/Reports", ReportsRouter)
+app.use("/Dashboard", DashboardRouter)
 
 
 app.listen(process.env.PORT, (error) => {
