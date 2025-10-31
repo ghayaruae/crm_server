@@ -9,5 +9,6 @@ router.post("/Masters/CreateTarget", AuthMiddleware.AdminAuth, TargetController.
 router.get("/Masters/GetTargets", AuthMiddleware.AdminAuth, TargetController.GetTargets)
 router.get("/Masters/GetTargetInfo", AuthMiddleware.AdminAuth, TargetController.GetTargetInfo)
 router.post("/Masters/DeleteTarget", AuthMiddleware.AdminAuth, TargetController.DeleteTarget)
+router.get("/Masters/GetSalesmanList", AuthMiddleware.AdminAuth, TargetController.GetSalesmanList)
 
 module.exports = router;

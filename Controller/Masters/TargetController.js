@@ -87,3 +87,15 @@ exports.DeleteTarget = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal Server Error", error });
     }
 }
+
+exports.GetSalesmanList = async () => {
+    try {
+        let query = "SELECT * FROM business__salesmans";
+
+        const rows = await pool.query(query)
+        return res.json({ success: true, data: rows })
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Internal Server Error", error });
+    }
+}
