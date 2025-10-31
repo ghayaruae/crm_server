@@ -88,7 +88,7 @@ exports.DeleteTarget = async (req, res) => {
     }
 }
 
-exports.GetSalesmanList = async () => {
+exports.GetSalesmanList = async (req, res) => {
     try {
         let query = "SELECT * FROM business__salesmans";
 
