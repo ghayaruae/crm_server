@@ -98,8 +98,11 @@ exports.DeleteTarget = async (req, res) => {
         if (!business_salesman_target_id) return res.json({ success: false, message: "business_salesman_target_id is required..!" });
 
         let query = "DELETE FROM business__salesmans_targets WHERE business_salesman_target_id = ?"
-        await pool.query(query, [business_salesman_target_id])
-
+        const [result] = await pool.query(query, [business_salesman_target_id])
+        
+        if (result.affectedRows === 0) {
+            return res.json({ success: false, message: "Target not found" });
+        }
         return res.json({ success: true, message: "Target deleted successfully..!" });
     } catch (error) {
         console.error(error);

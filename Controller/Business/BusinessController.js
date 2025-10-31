@@ -74,6 +74,18 @@ exports.GetBusinessInfo = async (req, res) => {
     }
 };
 
+exports.GetBusinessesList = async (req, res) => {
+    try {
+        let query = "SELECT * FROM business";
+
+        const [rows] = await pool.query(query)
+        return res.json({ success: true, data: rows })
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Internal Server Error", error });
+    }
+}
+
 // ------------- business orders api // ------------- //
 exports.GetBusinessOrders = async (req, res) => {
     try {

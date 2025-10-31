@@ -8,6 +8,7 @@ const BusinessController = require("../Controller/Business/BusinessController");
 
 // ----------------------- All business  ----------------------- //
 router.get("/GetBusinesses", AuthMiddleware.AdminAuth, BusinessController.GetBusinesses);
+router.get("/GetBusinessesList", AuthMiddleware.AdminAuth, BusinessController.GetBusinessesList);
 // ----------------------- All business  ----------------------- //
 
 
