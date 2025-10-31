@@ -32,7 +32,7 @@ exports.CreateTarget = async (req, res) => {
 
 exports.GetTargets = async (req, res) => {
     try {
-        const { limit, page } = req.query;
+        const { limit, page, keyword } = req.query;
 
         let query_count = "SELECT COUNT(*) AS total_records FROM business__salesmans_targets"
         let query = `
@@ -44,9 +44,15 @@ exports.GetTargets = async (req, res) => {
             ON business__salesmans_targets.business_salesman_id = s.business_salesman_id
         `;
 
+        
         let conditionValue = [];
         let conditionCols = [];
-
+        
+        if (keyword) {
+            conditionCols.push(`s.businessbusiness_salesmen_name LIKE ?`)
+            conditionValue.push(`${keyword}`)
+        }
+        
         if (conditionCols.length > 0) {
             query += " WHERE " + conditionCols.join(" AND ");
             query_count += " WHERE " + conditionCols.join(" AND ");
