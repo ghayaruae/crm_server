@@ -17,11 +17,13 @@ const UsersRoutes = require("./Router/UsersRouter");
 const BusinessRouter = require("./Router/BusinessRouter");
 const ReportsRouter = require("./Router/ReportsRouter");
 const DashboardRouter = require("./Router/DashboardRouter");
+const MastersRouter = require("./Router/MastersRouter");
 
 app.use("/Users", UsersRoutes)
 app.use("/Business", BusinessRouter)
 app.use("/Reports", ReportsRouter)
 app.use("/Dashboard", DashboardRouter)
+app.use("/Masters", MastersRouter)
 
 
 app.listen(process.env.PORT, (error) => {
