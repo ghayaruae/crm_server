@@ -34,40 +34,46 @@ exports.GetTargets = async (req, res) => {
     try {
         const { limit, page, keyword } = req.query;
 
-        let query_count = "SELECT COUNT(*) AS total_records FROM business__salesmans_targets"
-        let query = `
-          SELECT 
-            business__salesmans_targets.*, 
-            s.business_salesmen_name 
-           FROM business__salesmans_targets 
-           LEFT JOIN business__salesmans AS s 
-            ON business__salesmans_targets.business_salesman_id = s.business_salesman_id
+        let query_count = `
+          SELECT COUNT(*) AS total_records
+          FROM business__salesmans_targets t
+          LEFT JOIN business__salesmans AS s 
+            ON t.business_salesman_id = s.business_salesman_id
         `;
 
-        
+        let query = `
+          SELECT 
+            t.*, 
+            s.business_salesmen_name 
+          FROM business__salesmans_targets t
+          LEFT JOIN business__salesmans AS s 
+            ON t.business_salesman_id = s.business_salesman_id
+        `;
+
         let conditionValue = [];
         let conditionCols = [];
-        
+
         if (keyword) {
-            conditionCols.push(`s.businessbusiness_salesmen_name LIKE ?`)
-            conditionValue.push(`${keyword}`)
-        }
-        
-        if (conditionCols.length > 0) {
-            query += " WHERE " + conditionCols.join(" AND ");
-            query_count += " WHERE " + conditionCols.join(" AND ");
+            conditionCols.push(`s.business_salesmen_name LIKE ?`);
+            conditionValue.push(`%${keyword}%`);
         }
 
-        query += ` ORDER BY business__salesmans_targets.business_salesman_target_id DESC `;
-        query += ` LIMIT ?, ?`;
+        if (conditionCols.length > 0) {
+            const whereClause = " WHERE " + conditionCols.join(" AND ");
+            query += whereClause;
+            query_count += whereClause;
+        }
+
+        query += ` ORDER BY t.business_salesman_target_id DESC LIMIT ?, ?`;
 
         const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
         return res.status(200).json(response);
+
     } catch (error) {
         console.error(error);
         return res.status(500).json({ success: false, message: "Internal Server Error", error });
     }
-}
+};
 
 exports.GetTargetInfo = async (req, res) => {
     try {
