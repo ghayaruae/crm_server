@@ -35,7 +35,14 @@ exports.GetTargets = async (req, res) => {
         const { limit, page } = req.query;
 
         let query_count = "SELECT COUNT(*) AS total_records FROM business__salesmans_targets"
-        let query = "SELECT * FROM business__salesmans_targets"
+        let query = `
+          SELECT 
+            business__salesmans_targets.*, 
+            s.business_salesmen_name 
+           FROM business__salesmans_targets 
+           LEFT JOIN business__salesmans AS s 
+            ON business__salesmans_targets.business_salesman_id = s.business_salesman_id
+        `;
 
         let conditionValue = [];
         let conditionCols = [];
