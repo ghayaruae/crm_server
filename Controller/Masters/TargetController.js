@@ -99,7 +99,7 @@ exports.GetSalesmanList = async (req, res) => {
     try {
         let query = "SELECT * FROM business__salesmans";
 
-        const rows = await pool.query(query)
+        const [rows] = await pool.query(query)
         return res.json({ success: true, data: rows })
     } catch (error) {
         console.error(error);
