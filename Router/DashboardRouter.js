@@ -2,9 +2,11 @@ const express = require("express");
 const router = express.Router();
 
 const AuthMiddleware = require("../Middleware/AuthMiddleware");
-const DashboardControler = require("../Controller/Dashboard/DashboardControler");
+const DashboardController = require("../Controller/Dashboard/DashboardController");
 
-router.get("/GetDashboardStates", AuthMiddleware.AdminAuth, DashboardControler.GetDashboardStates);
+router.get("/GetDashboardData", AuthMiddleware.AdminAuth, DashboardController.GetDashboardData);
+router.get("/GetBusinessesNoRecentOrders", AuthMiddleware.AdminAuth, DashboardController.GetBusinessesNoRecentOrders);
+router.get("/GetMonthlySalesBySalesman", AuthMiddleware.AdminAuth, DashboardController.GetMonthlySalesBySalesman);
 
 
 module.exports = router;
