@@ -82,7 +82,7 @@ exports.CreateUser = async (req, res) => {
         const randomNumber = Math.floor(Math.random() * 1000);
 
         const { upload } = await FormFileData(
-            "business__salesmans",
+            "salesmans",
             "business_salesman_image",
             `business_salesman_image_${todayDate}_${randomNumber}`
         );
@@ -113,7 +113,7 @@ exports.GetUsers = async (req, res) => {
 
         let query = `
           SELECT *,
-          CONCAT('${global.base_server_file_url}public/business__salesmans/', business_salesman_image) AS business_salesman_image_url
+          CONCAT('${global.base_server_file_url}public/salesmans/', business_salesman_image) AS business_salesman_image_url
           FROM business__salesmans`;
 
         let conditionValue = [];
