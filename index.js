@@ -9,12 +9,7 @@ app.use(body_parser.json());
 app.use(body_parser.urlencoded({ extended: true, }));
 
 app.use(cors({ origin: '*' }));
-// app.use('/public', express.static(path.join(__dirname, 'public')));
-const publicPath = path.join(__dirname, 'public');
-app.use('/public', express.static(publicPath));
-
-// Add this to verify the static path
-console.log('Static files served from:', publicPath);
+app.use('/public', express.static(path.join(__dirname, 'public')));
 app.get("/", (req, res) => { res.json("Working") });
 
 
