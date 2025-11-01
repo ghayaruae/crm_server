@@ -64,14 +64,6 @@ const CreateUsers = async (req, data) => {
         }
 
         if (data.business_salesman_id) {
-            if (req.file) {
-                const [old] = await pool.query("SELECT business_salesman_image FROM business__salesmans WHERE business_salesman_id = ?", [data.business_salesman_id]);
-                if (old[0]?.business_salesman_image) {
-                    const oldPath = path.join(__dirname, '../../public/business__salesmans', old[0].business_salesman_image);
-                    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-                }
-            }
-
             await pool.query("UPDATE business__salesmans SET ? WHERE business_salesman_id = ?", [fields, data.business_salesman_id]);
             return { success: true, message: "User updated successfully" };
         } else {
@@ -122,7 +114,7 @@ exports.GetUsers = async (req, res) => {
         let query = `
           SELECT *,
           CONCAT('${global.base_server_file_url}public/salesman/', business_salesman_image) AS business_salesman_image_url
-          FROM business__salesmans`; 
+          FROM business__salesmans`;
 
         let conditionValue = [];
         let conditionCols = [];
@@ -171,12 +163,6 @@ exports.DeleteUser = async (req, res) => {
         const { business_salesman_id } = req.body;
         if (!business_salesman_id)
             return res.json({ success: false, message: "business_salesman_id is required..!" });
-
-        const [old] = await pool.query("SELECT business_salesman_image FROM business__salesmans WHERE business_salesman_id = ?", [business_salesman_id]);
-        if (old[0]?.business_salesman_image) {
-            const oldPath = path.join(__dirname, '../../public/business__salesmans', old[0].business_salesman_image);
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-        }
 
         const [result] = await pool.query("DELETE FROM business__salesmans WHERE business_salesman_id = ?", [business_salesman_id]);
 
