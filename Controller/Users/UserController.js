@@ -120,8 +120,9 @@ exports.GetUsers = async (req, res) => {
           FROM business__salesmans`;
 
         let query = `
-          SELECT * 
-          FROM business__salesmans`;
+          SELECT *,
+          CONCAT('${global.base_server_file_url}public/salesman/', business_salesman_image) AS business_salesman_image_url
+          FROM business__salesmans`; 
 
         let conditionValue = [];
         let conditionCols = [];
