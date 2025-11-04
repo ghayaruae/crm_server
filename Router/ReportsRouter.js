@@ -10,4 +10,7 @@ router.get("/GetBusinessOrdersReport", AuthMiddleware.AdminAuth, ReportsControll
 router.get("/GetBusinessAllOrdersReport", AuthMiddleware.AdminAuth, ReportsController.GetBusinessAllOrdersReport);
 
 
+router.get("/GetAllTargetReports", AuthMiddleware.AdminAuth, ReportsController.GetAllTargetReports);
+
+
 module.exports = router;

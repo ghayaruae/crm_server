@@ -5,8 +5,10 @@ const { PaginationQuery } = require("../Helper/QueryHelper");
 exports.CreateFollowup = async (req, res) => {
     try {
         const request = req.body;
+        const business_salesman_id = req.headers['business-salesman-id'];
+
         const fields = {
-            business_salesman_id: request.business_salesman_id,
+            business_salesman_id,
             business_id: request.business_id,
             business_salesman_followup_type: request.business_salesman_followup_type,
             business_salesman_followup_date: request.business_salesman_followup_date,
@@ -97,7 +99,7 @@ exports.DeleteFollowup = async (req, res) => {
 
         let query = "DELETE FROM business__salesmans_followups WHERE business_salesman_followup_id = ?"
         const [result] = await pool.query(query, [business_salesman_followup_id])
-        
+
         if (result.affectedRows === 0) {
             return res.json({ success: false, message: "Followup not found" });
         }

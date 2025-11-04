@@ -10,8 +10,6 @@ exports.GetBusinesses = async (req, res) => {
         const business_salesman_id = req.headers['business-salesman-id'];
         const { limit, page, } = req.query;
 
-        console.log("business_salesman_id ===>", business_salesman_id)
-
         let query_count = `SELECT COUNT(*) AS total_records
          FROM business`
 
@@ -76,9 +74,13 @@ exports.GetBusinessInfo = async (req, res) => {
 
 exports.GetBusinessesList = async (req, res) => {
     try {
-        let query = "SELECT * FROM business";
 
-        const [rows] = await pool.query(query)
+        const business_salesman_id = req.headers['business-salesman-id'];
+
+
+        let query = "SELECT * FROM business WHERE business_salesman_id = ? AND business_is_deleted = 0";
+
+        const [rows] = await pool.query(query, [business_salesman_id])
         return res.json({ success: true, data: rows })
     } catch (error) {
         console.error(error);

@@ -9,5 +9,8 @@ router.get("/GetBusinessesNoRecentOrders", AuthMiddleware.AdminAuth, DashboardCo
 router.get("/GetMonthlySalesBySalesman", AuthMiddleware.AdminAuth, DashboardController.GetMonthlySalesBySalesman);
 
 
+
+router.get("/GetSalesmanTargetChartData", AuthMiddleware.AdminAuth, DashboardController.GetSalesmanTargetChartData);
+
 module.exports = router;
 

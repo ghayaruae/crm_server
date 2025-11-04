@@ -28,21 +28,14 @@ exports.GetDashboardData = async (req, res) => {
             });
         }
 
-        // 🟢 Total inactive businesses
-        const [totalactive] = await pool.query(
-            `SELECT COUNT(*) AS total_active_business FROM business WHERE business_salesman_id = ? AND is_active = 1`,
-            [business_salesman_id]
-        );
-
         const [totalInactive] = await pool.query(
-            `SELECT COUNT(*) AS total_inactive_business FROM business WHERE business_salesman_id = ? AND is_active = 0`,
+            `SELECT COUNT(*) AS total_inactive_business FROM business WHERE business_salesman_id = ? AND is_active = 0 AND business_is_deleted = 0`,
             [business_salesman_id]
         );
 
-        // 🟢 Total orders
-        const [totalOrders] = await pool.query(
-            `SELECT COUNT(*) AS total_orders FROM business__orders WHERE business_order_business_id IN (?)`,
-            [businessIds]
+        const [totalBusiness] = await pool.query(
+            `SELECT COUNT(*) AS total_assign_business FROM business WHERE business_salesman_id = ? AND business_is_deleted = 0`,
+            [business_salesman_id]
         );
 
         // 🟢 Total pending orders
@@ -51,14 +44,17 @@ exports.GetDashboardData = async (req, res) => {
             [businessIds]
         );
 
-        const [salesman_info] = await pool.query(`SELECT * FROM business__salesmans WHERE business_salesman_id = ?`, [business_salesman_id]);
+        const [salesman_info] = await pool.query(`
+            SELECT * FROM business__salesmans
+            LEFT JOIN business__salesmans_targets ON business__salesmans.business_salesman_id = business__salesmans_targets.business_salesman_id
+            WHERE business__salesmans.business_salesman_id = ?`
+            , [business_salesman_id]);
 
         return res.json({
             success: true,
             data: {
-                total_active_business: totalactive[0].total_active_business || 0,
+                total_assign_business: totalBusiness[0].total_assign_business || 0,
                 total_inactive_business: totalInactive[0].total_inactive_business || 0,
-                total_orders: totalOrders[0].total_orders || 0,
                 total_pending_orders: totalPending[0].total_pending_orders || 0
             },
             salesman_info: salesman_info[0]
@@ -86,15 +82,17 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
             SELECT 
                 b.business_id,
                 b.business_name,
-                b.business_mobile,
+                b.business_contact_number,
                 b.business_email,
                 MAX(o.business_order_date) AS last_order_date
             FROM business b
             LEFT JOIN business__orders o 
                 ON b.business_id = o.business_order_business_id
             WHERE b.business_salesman_id = ?
-            GROUP BY b.business_id, b.business_name, b.business_mobile, b.business_email
-            HAVING (last_order_date IS NULL OR last_order_date < DATE_SUB(NOW(), INTERVAL 2 DAY))
+            GROUP BY b.business_id, b.business_name, b.business_contact_number, b.business_email
+            HAVING 
+                last_order_date IS NULL 
+                OR last_order_date < DATE_SUB(CURDATE(), INTERVAL 2 DAY)
             ORDER BY last_order_date ASC
             `,
             [business_salesman_id]
@@ -104,6 +102,7 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
             success: true,
             data: businesses,
         });
+
     } catch (error) {
         console.log("error", error);
         return res.json({
@@ -113,6 +112,7 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
         });
     }
 };
+
 
 exports.GetMonthlySalesBySalesman = async (req, res) => {
     try {
@@ -171,3 +171,72 @@ exports.GetMonthlySalesBySalesman = async (req, res) => {
         });
     }
 };
+
+exports.GetSalesmanTargetChartData = async (req, res) => {
+    try {
+        const business_salesman_id = req.headers['business-salesman-id'];
+
+        // Fetch latest target row for salesman
+        const [targetRow] = await pool.query(
+            `SELECT business_salesman_target, business_salesman_target_from, business_salesman_target_to 
+             FROM business__salesmans_targets 
+             WHERE business_salesman_id = ? 
+             ORDER BY business_salesman_target_id DESC LIMIT 1`,
+            [business_salesman_id]
+        );
+
+        if (!targetRow || targetRow.length === 0) {
+            return res.status(404).json({ message: "Target not assigned" });
+        }
+
+        const target = targetRow[0];
+
+        // Fetch all businesses under this salesman
+        const [businesses] = await pool.query(
+            `SELECT business_id FROM business WHERE business_salesman_id = ?`,
+            [business_salesman_id]
+        );
+
+        const business_ids = businesses?.map(item => item.business_id) || [];
+
+        if (!business_ids.length) {
+            // No businesses found → No achievement
+            return res.json({
+                total_target_amount: parseFloat(target.business_salesman_target),
+                total_achievement_amount: 0,
+                total_pending_amount: parseFloat(target.business_salesman_target)
+            });
+        }
+
+        // Fetch orders for these businesses in target date range
+        const [orders] = await pool.query(
+            `SELECT SUM(business_order_grand_total) AS achievement
+             FROM business__orders
+             WHERE business_order_business_id IN (?)
+             AND DATE(business_order_date) BETWEEN ? AND ?`,
+            [
+                business_ids,
+                target.business_salesman_target_from,
+                target.business_salesman_target_to
+            ]
+        );
+
+        const achievementAmount = orders[0].achievement || 0;
+        const targetAmount = parseFloat(target.business_salesman_target);
+        const pendingAmount = Math.max(targetAmount - achievementAmount, 0);
+
+        return res.json({
+            success: true,
+            data: {
+                total_target_amount: parseFloat(targetAmount).toFixed(2),
+                total_achievement_amount: parseFloat(achievementAmount).toFixed(2),
+                total_pending_amount: parseFloat(pendingAmount).toFixed(2)
+            }
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Server error" });
+    }
+};
+
