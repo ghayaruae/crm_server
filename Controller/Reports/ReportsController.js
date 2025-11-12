@@ -221,26 +221,52 @@ exports.GetAllTargetReports = async (req, res) => {
 
 exports.GetAllFollowupsReports = async (req, res) => {
     try {
-        const { from_date, to_date, business_salesman_id } = req.query;
+        let { from_date, to_date, business_salesman_id } = req.query;
 
-        const [rows] = await pool.query(
-            `SELECT 
-            business__salesmans_targets.*,
-            business__salesmans.business_salesmen_name,
-            business__salesmans.business_salesmen_contact_number,
-            business__salesmans.business_salesman_email
-            FROM business__salesmans_followups 
+        // 🧩 Check if valid date filters provided
+        const hasDates = from_date && to_date;
+
+        // Base query
+        let query = `
+            SELECT 
+                business__salesmans_followups.*,
+                business__salesmans.business_salesmen_name,
+                business__salesmans.business_salesmen_contact_number,
+                business__salesmans.business_salesman_email
+            FROM business__salesmans_followups
             LEFT JOIN business__salesmans 
-            ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id
-            WHERE DATE(business__salesmans_followups.business_salesman_followup_date) BETWEEN ? AND ?
-            AND (? IS NULL OR business__salesmans_followups.business_salesman_id = ?)`,
-            [from_date, to_date, business_salesman_id || null, business_salesman_id || null]
-        );
+                ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id
+            WHERE 1=1
+        `;
 
-        return res.json({ success: true, data: rows })
+        const params = [];
+
+        // ✅ Add date filter only if both dates exist
+        if (hasDates) {
+            query += ` AND DATE(business__salesmans_followups.business_salesman_followup_date) BETWEEN ? AND ?`;
+            params.push(from_date, to_date);
+        }
+
+        // ✅ Add salesman filter only if provided
+        if (business_salesman_id) {
+            query += ` AND business__salesmans_followups.business_salesman_id = ?`;
+            params.push(business_salesman_id);
+        }
+
+        // Execute query
+        const [rows] = await pool.query(query, params);
+
+        return res.json({
+            success: true,
+            data: rows,
+        });
 
     } catch (error) {
-        console.log("error", error);
-        return res.json({ success: false, message: "Internal server error", error });
+        console.error("GetAllFollowupsReports Error:", error);
+        return res.json({
+            success: false,
+            message: "Internal server error",
+            error,
+        });
     }
-}
+};

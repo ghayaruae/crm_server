@@ -16,9 +16,9 @@ router.post("/DeleteUser", AuthMiddleware.AdminAuth, UserController.DeleteUser);
 
 const UserPrivilageController = require("../Controller/Users/UserPrivilageController");
 router.post("/UpdateSalesmanPermissions", AuthMiddleware.AdminAuth, UserPrivilageController.UpdateSalesmanPermissions);
-router.post("/CreatePrivillage", AuthMiddleware.AdminAuth, UserPrivilageController.CreatePrivillage);
+router.post("/CreatePrivillage", UserPrivilageController.CreatePrivillage);
 router.get("/GetSalesmanPrivilageList", AuthMiddleware.AdminAuth, UserPrivilageController.GetSalesmanPrivilageList);
-router.get("/GetPrivillage", AuthMiddleware.AdminAuth, UserPrivilageController.GetPrivillage);
+router.get("/GetPrivillage", UserPrivilageController.GetPrivillage);
 
 
 

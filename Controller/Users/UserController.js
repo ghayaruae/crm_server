@@ -4,8 +4,6 @@ const jwt = require('jsonwebtoken');
 const { global } = require("../../Config/global");
 const { PaginationQuery } = require("../Helper/QueryHelper");
 const { FormFileData } = require("../Helper/Utils")
-const path = require("path");
-const fs = require("fs");
 
 exports.Login = async (req, res) => {
     try {

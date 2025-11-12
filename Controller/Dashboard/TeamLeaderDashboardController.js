@@ -89,3 +89,93 @@ exports.GetTeamLeaderDashboardStates = async (req, res) => {
         });
     }
 };
+
+
+exports.GetTargetAchievementReport = async (req, res) => {
+    try {
+        // ✅ Step 1: Get all salesmen
+        const [salesmen] = await pool.query(`SELECT * FROM business__salesmans`);
+
+        if (!salesmen.length) {
+            return res.json({ success: true, data: { above_target: [], below_target: [] } });
+        }
+
+        const aboveTarget = [];
+        const belowTarget = [];
+
+        // ✅ Step 2: Loop through each salesman
+        for (const salesman of salesmen) {
+            const salesman_id = salesman.business_salesman_id;
+
+            // --- Get total target ---
+            const [targetRows] = await pool.query(
+                `SELECT 
+                    IFNULL(SUM(business_salesman_target), 0) AS total_target
+                 FROM business__salesmans_targets
+                 WHERE business_salesman_id = ?`,
+                [salesman_id]
+            );
+            const total_target = targetRows[0]?.total_target || 0;
+
+            // --- Get all businesses under this salesman ---
+            const [businessRows] = await pool.query(
+                `SELECT business_id FROM business WHERE business_salesman_id = ?`,
+                [salesman_id]
+            );
+
+            const businessIds = businessRows.map(b => b.business_id);
+            let total_achievement = 0;
+
+            // --- Get total achieved sales ---
+            if (businessIds.length > 0) {
+                const [achievementRows] = await pool.query(
+                    `SELECT 
+                        IFNULL(SUM(business_order_grand_total), 0) AS total_achievement
+                     FROM business__orders 
+                     WHERE business_order_business_id IN (?)`,
+                    [businessIds]
+                );
+                total_achievement = achievementRows[0]?.total_achievement || 0;
+            }
+
+            // --- Calculate difference ---
+            const difference = total_achievement - total_target;
+
+            // --- Create clean object ---
+            const dataObject = {
+                business_salesman_id: salesman.business_salesman_id,
+                business_salesman_name: salesman.business_salesmen_name,
+                business_salesman_email: salesman.business_salesman_email,
+                business_salesman_contact_number: salesman.business_salesmen_contact_number,
+                total_target,
+                total_achievement,
+                difference,
+            };
+
+            // ✅ Separate into groups
+            if (difference >= 0) {
+                aboveTarget.push(dataObject);
+            } else {
+                belowTarget.push(dataObject);
+            }
+        }
+
+        // ✅ Return grouped data
+        return res.json({
+            success: true,
+            message: "Salesman target vs achievement report fetched successfully",
+            data: {
+                above_target: aboveTarget,
+                below_target: belowTarget,
+            },
+        });
+
+    } catch (error) {
+        console.error("GetTargetAchievementReport Error:", error);
+        return res.json({
+            success: false,
+            message: "Internal server error",
+            error,
+        });
+    }
+};

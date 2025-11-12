@@ -53,6 +53,8 @@ exports.CreatePrivillage = async (req, res) => {
 
         const request = req.body;
 
+        console.log("request", request);
+
         let fields = {
             salesman_privilege_name: request.salesman_privilege_name,
             salesman_description: request.salesman_description,
