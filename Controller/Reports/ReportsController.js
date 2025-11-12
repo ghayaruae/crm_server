@@ -193,3 +193,29 @@ exports.GetAllTargetReports = async (req, res) => {
         return res.json({ success: false, message: "Internal server error", error });
     }
 }
+
+exports.GetAllFollowupsReports = async (req, res) => {
+    try {
+        const { from_date, to_date, business_salesman_id } = req.query;
+
+        const [rows] = await pool.query(
+            `SELECT 
+            business__salesmans_targets.*,
+            business__salesmans.business_salesmen_name,
+            business__salesmans.business_salesmen_contact_number,
+            business__salesmans.business_salesman_email
+            FROM business__salesmans_followups 
+            LEFT JOIN business__salesmans 
+            ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id
+            WHERE DATE(business__salesmans_followups.business_salesman_followup_date) BETWEEN ? AND ?
+            AND (? IS NULL OR business__salesmans_followups.business_salesman_id = ?)`,
+            [from_date, to_date, business_salesman_id || null, business_salesman_id || null]
+        );
+
+        return res.json({ success: true, data: rows })
+
+    } catch (error) {
+        console.log("error", error);
+        return res.json({ success: false, message: "Internal server error", error });
+    }
+}

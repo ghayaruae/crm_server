@@ -11,6 +11,7 @@ router.get("/GetBusinessAllOrdersReport", AuthMiddleware.AdminAuth, ReportsContr
 
 
 router.get("/GetAllTargetReports", AuthMiddleware.AdminAuth, ReportsController.GetAllTargetReports);
+router.get("/GetAllFollowupsReports", AuthMiddleware.AdminAuth, ReportsController.GetAllFollowupsReports);
 
 
 module.exports = router;
