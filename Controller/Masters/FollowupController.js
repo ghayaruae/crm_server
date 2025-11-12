@@ -109,3 +109,60 @@ exports.DeleteFollowup = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal Server Error", error });
     }
 }
+
+
+
+
+
+
+exports.GetFollowupsBySalesman = async (req, res) => {
+    try {
+        const { limit, page } = req.query;
+        const business_salesman_id = req.headers['business-salesman-id'];
+
+
+        let query_count = `
+          SELECT COUNT(*) AS total_records
+          FROM business__salesmans_followups f
+          LEFT JOIN business__salesmans AS s 
+            ON f.business_salesman_id = s.business_salesman_id
+          LEFT JOIN business AS b 
+            ON f.business_id = b.business_id
+        `;
+
+        let query = `
+          SELECT 
+            f.*, 
+            s.business_salesmen_name,
+            b.business_name 
+          FROM business__salesmans_followups f
+          LEFT JOIN business__salesmans AS s 
+            ON f.business_salesman_id = s.business_salesman_id
+          LEFT JOIN business AS b 
+            ON f.business_id = b.business_id
+        `;
+
+        let conditionValue = [];
+        let conditionCols = [];
+
+        if (business_salesman_id) {
+            conditionCols.push(`f.business_salesman_id = ?`);
+            conditionValue.push(business_salesman_id);
+        }
+
+        if (conditionCols.length > 0) {
+            const whereClause = " WHERE " + conditionCols.join(" AND ");
+            query += whereClause;
+            query_count += whereClause;
+        }
+
+        query += ` ORDER BY f.business_salesman_followup_id DESC LIMIT ?, ?`;
+
+        const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
+        return res.status(200).json(response);
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Internal Server Error", error });
+    }
+};

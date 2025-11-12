@@ -14,6 +14,11 @@ router.get("/GetSalesmanList", AuthMiddleware.AdminAuth, TargetController.GetSal
 
 
 
+router.get("/GetTargetsBySalesman", AuthMiddleware.AdminAuth, TargetController.GetTargetsBySalesman)
+router.get("/GetFollowupsBySalesman", AuthMiddleware.AdminAuth, FollowupController.GetFollowupsBySalesman)
+
+
+
 /// Followup routing
 router.post("/CreateFollowup", AuthMiddleware.AdminAuth, FollowupController.CreateFollowup)
 router.get("/GetFollowups", AuthMiddleware.AdminAuth, FollowupController.GetFollowups)
