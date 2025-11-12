@@ -21,6 +21,7 @@ router.get("/GetSalesmanPrivilageList", AuthMiddleware.AdminAuth, UserPrivilageC
 router.get("/GetPrivillage", UserPrivilageController.GetPrivillage);
 
 
+router.get("/GetSalesmanPrivillageInfo", AuthMiddleware.AdminAuth, UserPrivilageController.GetSalesmanPrivillageInfo);
 
 
 module.exports = router;

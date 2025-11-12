@@ -53,8 +53,6 @@ exports.CreatePrivillage = async (req, res) => {
 
         const request = req.body;
 
-        console.log("request", request);
-
         let fields = {
             salesman_privilege_name: request.salesman_privilege_name,
             salesman_description: request.salesman_description,
@@ -102,6 +100,29 @@ exports.GetPrivillage = async (req, res) => {
 
         const response = await PaginationQuery(query_count, query, condValues, limit, page);
         return res.status(200).json(response);
+
+    } catch (error) {
+        console.error("error", error);
+        return res.status(500).json({ success: false, message: "Internal Server Error", error });
+    }
+}
+
+exports.GetSalesmanPrivillageInfo = async (req, res) => {
+    try {
+
+        const { business_salesman_id } = req.query;
+
+        if (!business_salesman_id) return res.json({ success: false, message: "business_salesman_id is required" });
+
+        let query = "SELECT * FROM business__salesmans WHERE business_salesman_id = ?";
+        let permission_query = `SELECT * 
+        FROM business__salesman_privilage
+        LEFT JOIN business__salesman_privilage_list ON business__salesman_privilage.salesman_privilage_id = business__salesman_privilage_list.salesman_privilage_id 
+        WHERE business__salesman_privilage.business_salesman_id = ?
+        `
+        let [result] = await pool.query(query, business_salesman_id);
+        let [permissions] = await pool.query(permission_query, [business_salesman_id]);
+        return res.status(200).json({ success: true, data: result, permissions });
 
     } catch (error) {
         console.error("error", error);

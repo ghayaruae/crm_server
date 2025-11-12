@@ -306,49 +306,73 @@ exports.AllSalesmanReport = async (req, res) => {
 
 exports.AllSalesmanOrderReport = async (req, res) => {
     try {
-        const { limit, page, keyword, salesman_name, status } = req.query;
+        const { limit, page, keyword, salesman_name, status, from_date, to_date } = req.query;
 
+        // Base queries
         let query_count = `
-        SELECT COUNT(*) AS total_records
-        FROM business__orders 
-        LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-        LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
-        WHERE business.business_salesman_id IS NOT NULL
+            SELECT COUNT(*) AS total_records
+            FROM business__orders 
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
+            WHERE business.business_salesman_id IS NOT NULL
         `;
 
         let query = `
-        SELECT
-        business__orders.*, business.business_name, business.business_salesman_id,
-        business__salesmans.business_salesmen_name
-        FROM business__orders 
-        LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-        LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
-        WHERE business.business_salesman_id IS NOT NULL
+            SELECT
+                business__orders.*, 
+                business.business_name, 
+                business.business_salesman_id,
+                business__salesmans.business_salesmen_name
+            FROM business__orders 
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
+            WHERE business.business_salesman_id IS NOT NULL
         `;
 
-        let conditionValue = [];
+        const conditionValue = [];
 
+        // Keyword search (business name)
         if (keyword) {
             query += ` AND business.business_name LIKE ?`;
             query_count += ` AND business.business_name LIKE ?`;
             conditionValue.push(`%${keyword}%`);
         }
 
+        // Salesman filter
         if (salesman_name) {
             query += ` AND business__salesmans.business_salesmen_name LIKE ?`;
             query_count += ` AND business__salesmans.business_salesmen_name LIKE ?`;
             conditionValue.push(`%${salesman_name}%`);
         }
 
+        // Status filter
         if (status) {
             query += ` AND business__orders.business_order_status = ?`;
             query_count += ` AND business__orders.business_order_status = ?`;
-            conditionValue.push(`%${status}%`);
+            conditionValue.push(status);
         }
 
+        // Date range filter
+        if (from_date && to_date) {
+            query += ` AND DATE(business__orders.business_order_date) BETWEEN ? AND ?`;
+            query_count += ` AND DATE(business__orders.business_order_date) BETWEEN ? AND ?`;
+            conditionValue.push(from_date, to_date);
+        } else if (from_date) {
+            query += ` AND DATE(business__orders.business_order_date) >= ?`;
+            query_count += ` AND DATE(business__orders.business_order_date) >= ?`;
+            conditionValue.push(from_date);
+        } else if (to_date) {
+            query += ` AND DATE(business__orders.business_order_date) <= ?`;
+            query_count += ` AND DATE(business__orders.business_order_date) <= ?`;
+            conditionValue.push(to_date);
+        }
+
+        // Final ordering and pagination
         query += ` ORDER BY business__orders.business_order_id DESC LIMIT ?, ?`;
 
+        // Call pagination helper
         const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
+
         return res.status(200).json(response);
 
     } catch (error) {
@@ -359,6 +383,7 @@ exports.AllSalesmanOrderReport = async (req, res) => {
         });
     }
 };
+
 
 
 exports.AllSalesmanAssignBusinessReport = async (req, res) => {
