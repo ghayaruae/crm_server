@@ -14,4 +14,9 @@ router.get("/GetAllTargetReports", AuthMiddleware.AdminAuth, ReportsController.G
 router.get("/GetAllFollowupsReports", AuthMiddleware.AdminAuth, ReportsController.GetAllFollowupsReports);
 
 
+// salesman reports
+router.get("/AllSalesmanReport", AuthMiddleware.AdminAuth, ReportsController.AllSalesmanReport);
+router.get("/AllSalesmanOrderReport", AuthMiddleware.AdminAuth, ReportsController.AllSalesmanOrderReport);
+router.get("/AllSalesmanAssignBusinessReport", AuthMiddleware.AdminAuth, ReportsController.AllSalesmanAssignBusinessReport);
+
 module.exports = router;

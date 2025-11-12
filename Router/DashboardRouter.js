@@ -7,7 +7,6 @@ const DashboardController = require("../Controller/Dashboard/DashboardController
 router.get("/GetDashboardData", AuthMiddleware.AdminAuth, DashboardController.GetDashboardData);
 router.get("/GetBusinessesNoRecentOrders", AuthMiddleware.AdminAuth, DashboardController.GetBusinessesNoRecentOrders);
 router.get("/GetMonthlySalesBySalesman", AuthMiddleware.AdminAuth, DashboardController.GetMonthlySalesBySalesman);
-
 router.get("/GetSalesmanTargetChartData", AuthMiddleware.AdminAuth, DashboardController.GetSalesmanTargetChartData);
 
 

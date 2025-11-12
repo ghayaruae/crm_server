@@ -1,5 +1,4 @@
 const pool = require("../../Config/db_pool");
-const { global } = require("../../Config/global");
 const { PaginationQuery } = require("../Helper/QueryHelper");
 
 exports.GetBusinessOrdersReport = async (req, res) => {
@@ -270,3 +269,142 @@ exports.GetAllFollowupsReports = async (req, res) => {
         });
     }
 };
+
+
+// All salesman report //
+exports.AllSalesmanReport = async (req, res) => {
+    try {
+        let query_count = `SELECT COUNT(*) as total_records FROM business__salesmans`;
+
+        let query = `SELECT * FROM business__salesmans`;
+
+        let conditionValue = [];
+        let conditionCols = [];
+
+        if (req.query.keyword) {
+            conditionCols.push(`business__salesmans.business_salesmen_name LIKE ?`);
+            conditionValue.push(`%${req.query.keyword}%`);
+        }
+
+        if (conditionCols.length > 0) {
+            query += " WHERE " + conditionCols.join(" AND ");
+            query_count += " WHERE " + conditionCols.join(" AND ");
+        }
+
+        query += ` ORDER BY business__salesmans.business_salesman_id DESC `;
+        query += ` LIMIT ?, ?`;
+
+
+        const response = await PaginationQuery(query_count, query, conditionValue, req.query.limit, req.query.page);
+        return res.status(200).json(response);
+
+    } catch (error) {
+        SystemLogs(error, 'error');
+        return res.status(500).json({ success: false, message: 'Internal Server Error', error: error })
+    }
+}
+
+exports.AllSalesmanOrderReport = async (req, res) => {
+    try {
+        const { limit, page, keyword, salesman_name, status } = req.query;
+
+        let query_count = `
+        SELECT COUNT(*) AS total_records
+        FROM business__orders 
+        LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+        LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
+        WHERE business.business_salesman_id IS NOT NULL
+        `;
+
+        let query = `
+        SELECT
+        business__orders.*, business.business_name, business.business_salesman_id,
+        business__salesmans.business_salesmen_name
+        FROM business__orders 
+        LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+        LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
+        WHERE business.business_salesman_id IS NOT NULL
+        `;
+
+        let conditionValue = [];
+
+        if (keyword) {
+            query += ` AND business.business_name LIKE ?`;
+            query_count += ` AND business.business_name LIKE ?`;
+            conditionValue.push(`%${keyword}%`);
+        }
+
+        if (salesman_name) {
+            query += ` AND business__salesmans.business_salesmen_name LIKE ?`;
+            query_count += ` AND business__salesmans.business_salesmen_name LIKE ?`;
+            conditionValue.push(`%${salesman_name}%`);
+        }
+
+        if (status) {
+            query += ` AND business__orders.business_order_status = ?`;
+            query_count += ` AND business__orders.business_order_status = ?`;
+            conditionValue.push(`%${status}%`);
+        }
+
+        query += ` ORDER BY business__orders.business_order_id DESC LIMIT ?, ?`;
+
+        const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
+        return res.status(200).json(response);
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'Internal Server Error',
+            error: error.message
+        });
+    }
+};
+
+
+exports.AllSalesmanAssignBusinessReport = async (req, res) => {
+    try {
+
+        const { limit, page, keyword } = req.query;
+
+        let query_count = `SELECT COUNT(*) AS total_records 
+        FROM business 
+        LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
+        `;
+
+        let [salesmansman] = await pool.query(`SELECT * FROM business__salesmans`);
+        const business_salesman_id = salesmansman.map(item => item?.business_salesman_id);
+
+        let query = `SELECT * 
+        FROM business 
+        LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id 
+        `
+
+        let conditionValue = [];
+        let conditionCols = [];
+
+        if (business_salesman_id) {
+            conditionCols.push(`business.business_salesman_id IN (?)`);
+            conditionValue.push(business_salesman_id);
+        }
+
+        if (keyword) {
+            conditionCols.push(`business__salesmans.business_salesmen_name LIKE ?`);
+            conditionValue.push(`%${keyword}%`);
+        }
+
+        if (conditionCols.length > 0) {
+            query += " WHERE " + conditionCols.join(" AND ");
+            query_count += " WHERE " + conditionCols.join(" AND ");
+        }
+
+        query += ` ORDER BY business.business_id DESC `;
+        query += ` LIMIT ?, ?`;
+
+        const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
+        return res.status(200).json(response);
+
+    } catch (error) {
+        console.log("error ===>", error);
+        return res.json({ success: false, message: "Internal server error : ", error });
+    }
+}
