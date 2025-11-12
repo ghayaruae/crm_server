@@ -7,9 +7,20 @@ const UserController = require("../Controller/Users/UserController");
 router.post("/Login", UserController.Login);
 
 //// Users Routing
-router.post("/CreateUser", AuthMiddleware.AdminAuth, UserController.CreateUser)
-router.get("/GetUsers", AuthMiddleware.AdminAuth, UserController.GetUsers)
-router.get("/GetUserInfo", AuthMiddleware.AdminAuth, UserController.GetUserInfo)
-router.post("/DeleteUser", AuthMiddleware.AdminAuth, UserController.DeleteUser)
+router.post("/CreateUser", AuthMiddleware.AdminAuth, UserController.CreateUser);
+router.get("/GetUsers", AuthMiddleware.AdminAuth, UserController.GetUsers);
+router.get("/GetUserInfo", AuthMiddleware.AdminAuth, UserController.GetUserInfo);
+router.post("/DeleteUser", AuthMiddleware.AdminAuth, UserController.DeleteUser);
+
+
+
+const UserPrivilageController = require("../Controller/Users/UserPrivilageController");
+router.post("/UpdateSalesmanPermissions", AuthMiddleware.AdminAuth, UserPrivilageController.UpdateSalesmanPermissions);
+router.post("/CreatePrivillage", AuthMiddleware.AdminAuth, UserPrivilageController.CreatePrivillage);
+router.get("/GetSalesmanPrivilageList", AuthMiddleware.AdminAuth, UserPrivilageController.GetSalesmanPrivilageList);
+router.get("/GetPrivillage", AuthMiddleware.AdminAuth, UserPrivilageController.GetPrivillage);
+
+
+
 
 module.exports = router;

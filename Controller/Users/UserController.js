@@ -33,10 +33,20 @@ exports.Login = async (req, res) => {
 
         user.token = token;
 
+        const [permissions] = await pool.query(
+            `SELECT * 
+             FROM business__salesman_privilage  
+             LEFT JOIN business__salesman_privilage_list 
+             ON business__salesman_privilage.salesman_privilage_id = business__salesman_privilage_list.salesman_privilage_id
+             WHERE business__salesman_privilage.business_salesman_id = ?`,
+            [user.business_salesman_login_id]
+        );
+
         return res.json({
             success: true,
             message: "Login successful",
             data: user,
+            permissions
         });
 
     } catch (error) {

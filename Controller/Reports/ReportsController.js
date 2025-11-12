@@ -169,30 +169,55 @@ exports.GetBusinessAllOrdersReport = async (req, res) => {
 // ------------- target ------------- //
 exports.GetAllTargetReports = async (req, res) => {
     try {
+        let { from_date, to_date, business_salesman_id } = req.query;
 
-        const { from_date, to_date, business_salesman_id } = req.query;
+        // 🧩 Handle missing dates safely
+        const hasDates = from_date && to_date;
 
-        const [rows] = await pool.query(
-            `SELECT 
-            business__salesmans_targets.*,
-            business__salesmans.business_salesmen_name,
-            business__salesmans.business_salesmen_contact_number,
-            business__salesmans.business_salesman_email
+        // Base query
+        let query = `
+            SELECT 
+                business__salesmans_targets.*,
+                business__salesmans.business_salesmen_name,
+                business__salesmans.business_salesmen_contact_number,
+                business__salesmans.business_salesman_email
             FROM business__salesmans_targets 
             LEFT JOIN business__salesmans 
             ON business__salesmans_targets.business_salesman_id = business__salesmans.business_salesman_id
-            WHERE DATE(business__salesmans_targets.target_assigned_datetime) BETWEEN ? AND ?
-            AND (? IS NULL OR business__salesmans_targets.business_salesman_id = ?)`,
-            [from_date, to_date, business_salesman_id || null, business_salesman_id || null]
-        );
+            WHERE 1=1
+        `;
 
-        return res.json({ success: true, data: rows })
+        const params = [];
+
+        // ✅ Add date filter only if both dates are valid
+        if (hasDates) {
+            query += ` AND DATE(business__salesmans_targets.target_assigned_datetime) BETWEEN ? AND ?`;
+            params.push(from_date, to_date);
+        }
+
+        // ✅ Add salesman filter if provided
+        if (business_salesman_id) {
+            query += ` AND business__salesmans_targets.business_salesman_id = ?`;
+            params.push(business_salesman_id);
+        }
+
+        const [rows] = await pool.query(query, params);
+
+        return res.json({
+            success: true,
+            data: rows,
+        });
 
     } catch (error) {
-        console.log("error", error);
-        return res.json({ success: false, message: "Internal server error", error });
+        console.error("GetAllTargetReports Error:", error);
+        return res.json({
+            success: false,
+            message: "Internal server error",
+            error,
+        });
     }
-}
+};
+
 
 exports.GetAllFollowupsReports = async (req, res) => {
     try {
