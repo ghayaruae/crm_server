@@ -25,4 +25,11 @@ router.get("/GetFollowups", AuthMiddleware.AdminAuth, FollowupController.GetFoll
 router.get("/GetFollowupInfo", AuthMiddleware.AdminAuth, FollowupController.GetFollowupInfo)
 router.post("/DeleteFollowup", AuthMiddleware.AdminAuth, FollowupController.DeleteFollowup)
 
+
+const RequestInquery = require("../Controller/Masters/RequestInquery")
+router.post("/CreateRequestPartInquiry", AuthMiddleware.AdminAuth, RequestInquery.CreateRequestPartInquiry)
+router.post("/DeleteRequestPartInquery", AuthMiddleware.AdminAuth, RequestInquery.DeleteRequestPartInquery)
+router.get("/GetRequestPartInquiry", AuthMiddleware.AdminAuth, RequestInquery.GetRequestPartInquiry)
+router.get("/GetRequestPartInquiryInfo", AuthMiddleware.AdminAuth, RequestInquery.GetRequestPartInquiryInfo)
+
 module.exports = router;

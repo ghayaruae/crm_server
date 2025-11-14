@@ -13,6 +13,7 @@ router.get("/GetSalesmanTargetChartData", AuthMiddleware.AdminAuth, DashboardCon
 const TeamLeaderDashboardController = require("../Controller/Dashboard/TeamLeaderDashboardController");
 router.get("/GetTeamLeaderDashboardStates", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetTeamLeaderDashboardStates);
 router.get("/GetTargetAchievementReport", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetTargetAchievementReport);
+router.get("/GetLastPartInquiries", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetLastPartInquiries);
 
 
 module.exports = router;

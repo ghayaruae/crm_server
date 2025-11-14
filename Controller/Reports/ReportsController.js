@@ -170,52 +170,58 @@ exports.GetAllTargetReports = async (req, res) => {
     try {
         let { from_date, to_date, business_salesman_id } = req.query;
 
-        // 🧩 Handle missing dates safely
-        const hasDates = from_date && to_date;
-
-        // Base query
+        // Initialize base query and parameters
         let query = `
-            SELECT 
-                business__salesmans_targets.*,
-                business__salesmans.business_salesmen_name,
-                business__salesmans.business_salesmen_contact_number,
-                business__salesmans.business_salesman_email
-            FROM business__salesmans_targets 
-            LEFT JOIN business__salesmans 
-            ON business__salesmans_targets.business_salesman_id = business__salesmans.business_salesman_id
-            WHERE 1=1
-        `;
-
+      SELECT 
+        bst.*,
+        bs.business_salesmen_name,
+        bs.business_salesmen_contact_number,
+        bs.business_salesman_email
+      FROM business__salesmans_targets bst
+      LEFT JOIN business__salesmans bs
+      ON bst.business_salesman_id = bs.business_salesman_id
+      WHERE 1=1
+    `;
         const params = [];
 
-        // ✅ Add date filter only if both dates are valid
-        if (hasDates) {
-            query += ` AND DATE(business__salesmans_targets.target_assigned_datetime) BETWEEN ? AND ?`;
+        // 🧩 Filter 1: Date range (handle if one or both are missing)
+        if (from_date && to_date) {
+            query += ` AND DATE(bst.target_assigned_datetime) BETWEEN ? AND ?`;
             params.push(from_date, to_date);
+        } else if (from_date) {
+            query += ` AND DATE(bst.target_assigned_datetime) >= ?`;
+            params.push(from_date);
+        } else if (to_date) {
+            query += ` AND DATE(bst.target_assigned_datetime) <= ?`;
+            params.push(to_date);
         }
 
-        // ✅ Add salesman filter if provided
+        // 🧩 Filter 2: Salesman ID
         if (business_salesman_id) {
-            query += ` AND business__salesmans_targets.business_salesman_id = ?`;
+            query += ` AND bst.business_salesman_id = ?`;
             params.push(business_salesman_id);
         }
+
+        // 🧩 Optional: sort results by date
+        query += ` ORDER BY bst.target_assigned_datetime DESC`;
 
         const [rows] = await pool.query(query, params);
 
         return res.json({
             success: true,
+            count: rows.length,
             data: rows,
         });
 
     } catch (error) {
         console.error("GetAllTargetReports Error:", error);
-        return res.json({
+        return res.status(500).json({
             success: false,
             message: "Internal server error",
-            error,
         });
     }
 };
+
 
 
 exports.GetAllFollowupsReports = async (req, res) => {
@@ -345,11 +351,18 @@ exports.AllSalesmanOrderReport = async (req, res) => {
             conditionValue.push(`%${salesman_name}%`);
         }
 
-        // Status filter
+        // ✅ Status filter (handles single or multiple)
         if (status) {
-            query += ` AND business__orders.business_order_status = ?`;
-            query_count += ` AND business__orders.business_order_status = ?`;
-            conditionValue.push(status);
+            const statusArray = Array.isArray(status)
+                ? status
+                : typeof status === "string" && status.includes(",")
+                    ? status.split(",")
+                    : [status];
+
+            const placeholders = statusArray.map(() => "?").join(", ");
+            query += ` AND business__orders.business_order_status IN (${placeholders})`;
+            query_count += ` AND business__orders.business_order_status IN (${placeholders})`;
+            conditionValue.push(...statusArray);
         }
 
         // Date range filter
@@ -384,8 +397,6 @@ exports.AllSalesmanOrderReport = async (req, res) => {
     }
 };
 
-
-
 exports.AllSalesmanAssignBusinessReport = async (req, res) => {
     try {
 
@@ -413,8 +424,8 @@ exports.AllSalesmanAssignBusinessReport = async (req, res) => {
         }
 
         if (keyword) {
-            conditionCols.push(`business__salesmans.business_salesmen_name LIKE ?`);
-            conditionValue.push(`%${keyword}%`);
+            conditionCols.push(`business.business_name = ?`);
+            conditionValue.push(keyword);
         }
 
         if (conditionCols.length > 0) {
@@ -431,5 +442,61 @@ exports.AllSalesmanAssignBusinessReport = async (req, res) => {
     } catch (error) {
         console.log("error ===>", error);
         return res.json({ success: false, message: "Internal server error : ", error });
+    }
+}
+
+// OE Management //
+exports.GetInventoryCrossParts = async (req, res) => {
+    try {
+
+        const { part_number, limit, page, SUP_ID } = req.query;
+
+        if (!part_number) {
+            return res.json({ success: false, message: "part number is required" });
+        }
+
+        let query_count = `SELECT COUNT(*) as total_records FROM inventory__stock_cross`;
+
+        let query = `SELECT * FROM inventory__stock_cross`;
+
+        let conditionValue = [];
+        let conditionCols = [];
+
+        if (part_number) {
+            conditionCols.push(`inventory__stock_cross.part_number = ?`);
+            conditionValue.push(part_number);
+        }
+
+        if (SUP_ID) {
+            conditionCols.push(`inventory__stock_cross.part_sup_id = ?`);
+            conditionValue.push(SUP_ID);
+        }
+
+        if (conditionCols.length > 0) {
+            query += " WHERE " + conditionCols.join(" AND ");
+            query_count += " WHERE " + conditionCols.join(" AND ");
+        }
+
+        query += ` ORDER BY inventory__stock_cross.inventory_stock_oe_link_id DESC `;
+        query += ` LIMIT ?, ?`;
+
+
+        const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
+        return res.status(200).json(response);
+
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Internal Server Error', error: error })
+    }
+}
+
+exports.GetSupplierBrands = async (req, res) => {
+    try {
+
+        const brands = await pool.query(`SELECT * FROM SUPPLIERS WHERE SUP_STATUS = 1`);
+        return res.json({ success: true, data: brands[0] })
+
+    } catch (error) {
+        console.log("error", error)
+        return res.status(500).json({ success: false, message: 'Internal Server Error', error })
     }
 }

@@ -19,4 +19,10 @@ router.get("/AllSalesmanReport", AuthMiddleware.AdminAuth, ReportsController.All
 router.get("/AllSalesmanOrderReport", AuthMiddleware.AdminAuth, ReportsController.AllSalesmanOrderReport);
 router.get("/AllSalesmanAssignBusinessReport", AuthMiddleware.AdminAuth, ReportsController.AllSalesmanAssignBusinessReport);
 
+
+// salesman reports
+router.get("/GetInventoryCrossParts", AuthMiddleware.AdminAuth, ReportsController.GetInventoryCrossParts);
+router.get("/GetSupplierBrands", AuthMiddleware.AdminAuth, ReportsController.GetSupplierBrands);
+
+
 module.exports = router;

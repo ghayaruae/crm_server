@@ -56,8 +56,8 @@ exports.GetBusinessInfo = async (req, res) => {
         const [rows] = await pool.query(
             `SELECT * FROM business
              LEFT JOIN business__levels ON business.business_level_id = business__levels.business_level_id 
-             WHERE business_id = ? AND business_salesman_id = ?`,
-            [business_id, business_salesman_id]
+             WHERE business_id = ? `,
+            [business_id]
         );
 
         if (rows.length === 0) {
@@ -235,7 +235,7 @@ exports.GetBusinessDashboard = async (req, res) => {
 
         // Check if business exists & belongs to salesman
         const [businessRows] = await pool.query(
-            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
+            `SELECT * FROM business WHERE business_id = ?`,
             [business_id, business_salesman_id]
         );
 
@@ -342,8 +342,8 @@ exports.GetBusinessDocuments = async (req, res) => {
 
         // Validate that this business belongs to the salesman
         const [businessRows] = await pool.query(
-            `SELECT business_id FROM business WHERE business_id = ? AND business_salesman_id = ?`,
-            [business_id, business_salesman_id]
+            `SELECT business_id FROM business WHERE business_id = ?`,
+            [business_id]
         );
 
         if (businessRows.length === 0) {
@@ -384,8 +384,8 @@ exports.GetBusinessBrands = async (req, res) => {
             });
         }
         const [businessRows] = await pool.query(
-            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
-            [business_id, business_salesman_id]
+            `SELECT * FROM business WHERE business_id = ?`,
+            [business_id]
         );
 
         if (businessRows.length === 0) {
@@ -419,8 +419,8 @@ exports.GetBusinessOrdersList = async (req, res) => {
         }
 
         const [businessRows] = await pool.query(
-            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
-            [business_id, business_salesman_id]
+            `SELECT * FROM business WHERE business_id = ?`,
+            [business_id]
         );
 
         if (businessRows.length === 0) {
@@ -429,7 +429,8 @@ exports.GetBusinessOrdersList = async (req, res) => {
 
         const [rows] = await pool.query(
             `SELECT * FROM business__orders 
-             WHERE business_order_business_id = ?`,
+             WHERE business_order_business_id = ? 
+             ORDER BY business_order_id DESC`,
             [business_id]
         );
 
@@ -454,8 +455,8 @@ exports.GetBusinessCrditLimit = async (req, res) => {
         }
 
         const [businessRows] = await pool.query(
-            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
-            [business_id, business_salesman_id]
+            `SELECT * FROM business WHERE business_id = ?`,
+            [business_id]
         );
 
         if (businessRows.length === 0) {
@@ -503,8 +504,8 @@ exports.GetBusinessDueDays = async (req, res) => {
         }
 
         const [businessRows] = await pool.query(
-            `SELECT * FROM business WHERE business_id = ? AND business_salesman_id = ?`,
-            [business_id, business_salesman_id]
+            `SELECT * FROM business WHERE business_id = ?`,
+            [business_id]
         );
 
         if (businessRows.length === 0) {
