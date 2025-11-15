@@ -8,7 +8,7 @@ const { PaginationQuery } = require("../Helper/QueryHelper");
 exports.GetBusinesses = async (req, res) => {
     try {
         const business_salesman_id = req.headers['business-salesman-id'];
-        const { limit, page, } = req.query;
+        const { limit, page, keyword } = req.query;
 
         let query_count = `SELECT COUNT(*) AS total_records
          FROM business`
@@ -17,6 +17,11 @@ exports.GetBusinesses = async (req, res) => {
 
         let conditionValue = [];
         let conditionCols = [];
+
+        if (keyword) {
+            conditionCols.push(`business.business_name = ?`);
+            conditionValue.push(keyword);
+        }
 
         if (business_salesman_id) {
             conditionCols.push(`business.business_salesman_id = ?`);

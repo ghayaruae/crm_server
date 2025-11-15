@@ -35,29 +35,35 @@ exports.GetFollowups = async (req, res) => {
 
         let query_count = `
           SELECT COUNT(*) AS total_records
-          FROM business__salesmans_followups
+          FROM business__salesmans_followups f
+          LEFT JOIN business__salesmans AS s 
+              ON f.business_salesman_id = s.business_salesman_id
+          LEFT JOIN business AS b 
+              ON f.business_id = b.business_id
         `;
 
         let query = `
           SELECT 
-            f.*, 
-            s.business_salesmen_name,
-            b.business_name 
+              f.*, 
+              s.business_salesmen_name,
+              b.business_name 
           FROM business__salesmans_followups f
           LEFT JOIN business__salesmans AS s 
-            ON f.business_salesman_id = s.business_salesman_id
+              ON f.business_salesman_id = s.business_salesman_id
           LEFT JOIN business AS b 
-            ON f.business_id = b.business_id
+              ON f.business_id = b.business_id
         `;
 
         let conditionValue = [];
         let conditionCols = [];
 
+        // Searching
         if (keyword) {
             conditionCols.push(`s.business_salesmen_name LIKE ?`);
             conditionValue.push(`%${keyword}%`);
         }
 
+        // Apply WHERE if needed
         if (conditionCols.length > 0) {
             const whereClause = " WHERE " + conditionCols.join(" AND ");
             query += whereClause;
@@ -74,6 +80,7 @@ exports.GetFollowups = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal Server Error", error });
     }
 };
+
 
 exports.GetFollowupInfo = async (req, res) => {
     try {

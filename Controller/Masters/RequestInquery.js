@@ -123,6 +123,7 @@ exports.GetSalesmanPartInquiry = async (req, res) => {
          FROM inventory__part_requests
          LEFT JOIN business__salesmans ON inventory__part_requests.business_salesman_id = business__salesmans.business_salesman_id
          WHERE inventory__part_requests.business_salesman_id = ?
+         ORDER BY inventory__part_requests.inventory_part_request_id DESC
          `, [business_salesman_id])
 
         return res.json({ success: true, data: rows })
