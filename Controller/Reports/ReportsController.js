@@ -85,7 +85,7 @@ exports.GetBusinessOrdersReport = async (req, res) => {
 
 exports.GetBusinessAllOrdersReport = async (req, res) => {
     try {
-        const { from_date, to_date, page, limit, keyword } = req.query;
+        const { from_date, to_date, page, limit, keyword, status } = req.query;
 
         const business_salesman_id = req.headers['business-salesman-id'];
 
@@ -139,6 +139,11 @@ exports.GetBusinessAllOrdersReport = async (req, res) => {
         if (from_date && to_date) {
             conditions.push(`DATE(business__orders.business_order_date) BETWEEN ? AND ?`);
             conditionValue.push(from_date, to_date);
+        }
+
+        if (status) {
+            conditions.push(`business__orders.business_order_status = ?`);
+            conditionValue.push(status);
         }
 
         // Add conditions
@@ -497,6 +502,38 @@ exports.GetSupplierBrands = async (req, res) => {
 
     } catch (error) {
         console.log("error", error)
-        return res.status(500).json({ success: false, message: 'Internal Server Error', error })
+        return res.status(500).json({ success: false, message: 'Internal Server Error', error });
+    }
+}
+
+exports.GetPartInfo = async (req, res) => {
+    try {
+
+        const { sup_id, part_number } = req.query;
+
+        let query = `
+         SELECT *, 
+        (SELECT CONCAT(ART_MEDIA_INFO.ART_MEDIA_SUP_ID, '/', ART_MEDIA_INFO.ART_MEDIA_FILE_NAME) AS MEDIA_SOURCE
+        FROM ART_MEDIA_INFO WHERE ART_MEDIA_INFO.ART_MEDIA_ART_ID = PARTS.ART_ID AND ART_MEDIA_INFO.ART_MEDIA_TYPE IN ('BMP', 'JPEG', 'JPG', 'PNG', 'GIF') AND ART_MEDIA_INFO.ART_MEDIA_SUP_ID = PARTS.ART_SUP_ID LIMIT 1) AS MEDIA_SOURCE,
+        IFNULL(inventory__stock_status.stock_bb_price, 0) AS VD_PRICE,
+        IFNULL(inventory__stock_status.stock_price_mrp, 0) AS VD_PRICE_MRP,
+        IFNULL(inventory__stock_status.stock_available_qty, 0) AS VD_QTY,
+        PARTS.PRODUCT_GROUP_EN AS ART_PRODUCT_NAME,
+        (SELECT AVG(rating) FROM business__reviews WHERE part_number = PARTS.ART_SEARCH_NUMBER) AS ART_AVG_RATING, 
+        (SELECT COUNT(*) AS TOTAL_REVIEWS FROM business__reviews WHERE part_number = PARTS.ART_SEARCH_NUMBER) AS TOTAL_REVIEWS 
+
+        FROM PARTS 
+        LEFT JOIN inventory__stock_status ON inventory__stock_status.stock_number = PARTS.ART_SEARCH_NUMBER  AND inventory__stock_status.stock_sup_id = PARTS.ART_SUP_ID
+        LEFT JOIN SUPPLIERS ON SUPPLIERS.SUP_ID = PARTS.ART_SUP_ID 
+        LEFT JOIN PRODUCTS_NOTES ON PRODUCTS_NOTES.PT_ID = PARTS.PT_ID 
+        WHERE PARTS.ART_SUP_ID = ? AND PARTS.ART_SEARCH_NUMBER = ? LIMIT 1
+        `
+
+        const [rows] = await pool.query(query, [sup_id, part_number]);
+        return res.json({ success: true, data: rows })
+
+    } catch (error) {
+        console.log("error", error)
+        return res.status(500).json({ success: false, message: 'Internal Server Error', error });
     }
 }

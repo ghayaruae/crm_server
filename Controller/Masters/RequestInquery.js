@@ -16,6 +16,7 @@ exports.CreateRequestPartInquiry = async (req, res) => {
             request_note: request.request_note,
             request_part_market_price: request.request_part_market_price,
             request_supersedes: request.request_supersedes,
+            business_salesman_id: request.business_salesman_id,
             request_status: 0,
             request_date: global.current_date
         }
@@ -47,7 +48,12 @@ exports.GetRequestPartInquiry = async (req, res) => {
 
         let query_count = `SELECT COUNT(*) AS total_records FROM inventory__part_requests`;
 
-        let query = `SELECT * FROM inventory__part_requests`;
+        let query = `SELECT 
+         inventory__part_requests.*,
+         business__salesmans.business_salesmen_name   
+         FROM inventory__part_requests
+         LEFT JOIN business__salesmans ON inventory__part_requests.business_salesman_id = business__salesmans.business_salesman_id
+         `;
 
         let conditionValue = [];
         let conditionCols = [];
@@ -101,5 +107,28 @@ exports.DeleteRequestPartInquery = async (req, res) => {
     } catch (error) {
         console.error(error);
         return res.status(500).json({ success: false, message: "Internal Server Error", error });
+    }
+}
+
+exports.GetSalesmanPartInquiry = async (req, res) => {
+    try {
+
+        const { business_salesman_id } = req.query;
+
+        if (!business_salesman_id) return res.json({ success: false, message: "business_salesman_id is required" });
+
+        const [rows] = await pool.query(`SELECT 
+         inventory__part_requests.*,
+         business__salesmans.business_salesmen_name   
+         FROM inventory__part_requests
+         LEFT JOIN business__salesmans ON inventory__part_requests.business_salesman_id = business__salesmans.business_salesman_id
+         WHERE inventory__part_requests.business_salesman_id = ?
+         `, [business_salesman_id])
+
+        return res.json({ success: true, data: rows })
+
+    } catch (error) {
+        console.log("error", error);
+        return res.json({ success: false, message: "Internal server error", error });
     }
 }

@@ -23,6 +23,7 @@ router.get("/AllSalesmanAssignBusinessReport", AuthMiddleware.AdminAuth, Reports
 // salesman reports
 router.get("/GetInventoryCrossParts", AuthMiddleware.AdminAuth, ReportsController.GetInventoryCrossParts);
 router.get("/GetSupplierBrands", AuthMiddleware.AdminAuth, ReportsController.GetSupplierBrands);
+router.get("/GetPartInfo", AuthMiddleware.AdminAuth, ReportsController.GetPartInfo);
 
 
 module.exports = router;

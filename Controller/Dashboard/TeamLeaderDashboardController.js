@@ -183,7 +183,15 @@ exports.GetTargetAchievementReport = async (req, res) => {
 
 exports.GetLastPartInquiries = async (req, res) => {
     try {
-        const [rows] = await pool.query(`SELECT * FROM inventory__part_requests ORDER BY inventory_part_request_id DESC LIMIT 5`);
+        const [rows] = await pool.query(`SELECT 
+        inventory__part_requests.*,
+        business__salesmans.business_salesmen_name
+        FROM inventory__part_requests
+        LEFT JOIN business__salesmans 
+        ON inventory__part_requests.business_salesman_id = business__salesmans.business_salesman_id
+        ORDER BY inventory__part_requests.inventory_part_request_id DESC
+        LIMIT 5;
+`);
         return res.json({ success: true, data: rows })
     } catch (error) {
         console.error(error);

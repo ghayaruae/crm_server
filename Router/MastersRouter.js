@@ -31,5 +31,6 @@ router.post("/CreateRequestPartInquiry", AuthMiddleware.AdminAuth, RequestInquer
 router.post("/DeleteRequestPartInquery", AuthMiddleware.AdminAuth, RequestInquery.DeleteRequestPartInquery)
 router.get("/GetRequestPartInquiry", AuthMiddleware.AdminAuth, RequestInquery.GetRequestPartInquiry)
 router.get("/GetRequestPartInquiryInfo", AuthMiddleware.AdminAuth, RequestInquery.GetRequestPartInquiryInfo)
+router.get("/GetSalesmanPartInquiry", AuthMiddleware.AdminAuth, RequestInquery.GetSalesmanPartInquiry)
 
 module.exports = router;
