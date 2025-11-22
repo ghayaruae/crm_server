@@ -1,5 +1,6 @@
 const pool = require("../../Config/db_pool");
 
+
 exports.GetTeamLeaderDashboardStates = async (req, res) => {
     try {
 
@@ -16,27 +17,32 @@ exports.GetTeamLeaderDashboardStates = async (req, res) => {
 
         // ✅ Salesman targets
         const [[{ total_salesman_targets }]] = await pool.query(
-            `SELECT COUNT(*) AS total_salesman_targets FROM business__salesmans_targets`
+            `SELECT SUM(business_salesman_target) AS total_salesman_targets FROM business__salesmans_targets`
         );
 
         let business_ids = [];
+        let business_in_active = 0;
 
         // ✅ Get businesses assigned to salesmen
         if (salesman_ids.length > 0) {
             const [assign_business] = await pool.query(
-                `SELECT business_id FROM business WHERE business_salesman_id IN (?)`,
+                `SELECT business_id, is_active 
+                 FROM business 
+                 WHERE business_salesman_id IN (?)`,
                 [salesman_ids]
             );
 
             business_ids = assign_business.map(b => b.business_id);
+
+            // ✅ Count businesses where is_active = 0
+            business_in_active = assign_business.filter(b => b.is_active === 0).length;
         }
 
         let total_orders = 0;
-        let in_processing_orders = 0;
         let total_pending_orders = 0;
         let pending_amount = 0;
 
-        // ✅ Fetch all orders & process here
+        // ✅ Fetch all orders
         if (business_ids.length > 0) {
 
             const [orders] = await pool.query(
@@ -48,20 +54,12 @@ exports.GetTeamLeaderDashboardStates = async (req, res) => {
 
             total_orders = orders.length;
 
-            // ✅ In-process orders: status (0,1,2,3,4)
-            const processingOrders = orders.filter(o =>
-                [0, 1, 2, 3, 4].includes(o.business_order_status)
-            );
-
-            in_processing_orders = processingOrders.length;
-
             // ✅ Pending orders: status = 0
-            total_pending_orders = orders.filter(o =>
-                o.business_order_status === 0
-            ).length;
+            const pendingOrders = orders.filter(o => o.business_order_status === 0);
+            total_pending_orders = pendingOrders.length;
 
-            // ✅ Pending amount calculation
-            pending_amount = processingOrders.reduce(
+            // ✅ Pending amount only for pending orders
+            pending_amount = pendingOrders.reduce(
                 (acc, o) => acc + (o.business_order_grand_total || 0),
                 0
             );
@@ -73,8 +71,8 @@ exports.GetTeamLeaderDashboardStates = async (req, res) => {
                 total_salesman,
                 total_salesman_targets,
                 total_assigned_business: business_ids.length,
+                business_in_active,
                 total_orders,
-                in_processing_orders,
                 total_pending_orders,
                 pending_amount: parseFloat(pending_amount).toFixed(2)
             }
@@ -90,11 +88,13 @@ exports.GetTeamLeaderDashboardStates = async (req, res) => {
     }
 };
 
-
 exports.GetTargetAchievementReport = async (req, res) => {
     try {
         // ✅ Step 1: Get all salesmen
-        const [salesmen] = await pool.query(`SELECT * FROM business__salesmans`);
+        const [salesmen] = await pool.query(`
+            SELECT *
+            FROM business__salesmans
+            LEFT JOIN business__salesmans_targets ON business__salesmans.business_salesman_id = business__salesmans_targets.business_salesman_id`);
 
         if (!salesmen.length) {
             return res.json({ success: true, data: { above_target: [], below_target: [] } });
@@ -147,6 +147,8 @@ exports.GetTargetAchievementReport = async (req, res) => {
                 business_salesman_name: salesman.business_salesmen_name,
                 business_salesman_email: salesman.business_salesman_email,
                 business_salesman_contact_number: salesman.business_salesmen_contact_number,
+                business_salesman_target_from: salesman.business_salesman_target_from,
+                business_salesman_target_to: salesman.business_salesman_target_to,
                 total_target,
                 total_achievement,
                 difference,
@@ -179,7 +181,6 @@ exports.GetTargetAchievementReport = async (req, res) => {
         });
     }
 };
-
 
 exports.GetLastPartInquiries = async (req, res) => {
     try {

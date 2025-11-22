@@ -9,6 +9,7 @@ const ReportsController = require("../Controller/Reports/ReportsController");
 router.get("/GetBusinessOrdersReport", AuthMiddleware.AdminAuth, ReportsController.GetBusinessOrdersReport);
 router.get("/GetBusinessAllOrdersReport", AuthMiddleware.AdminAuth, ReportsController.GetBusinessAllOrdersReport);
 
+router.get("/GetInactiveBusinessList", AuthMiddleware.AdminAuth, ReportsController.GetInactiveBusinessList);
 
 router.get("/GetAllTargetReports", AuthMiddleware.AdminAuth, ReportsController.GetAllTargetReports);
 router.get("/GetAllFollowupsReports", AuthMiddleware.AdminAuth, ReportsController.GetAllFollowupsReports);

@@ -405,7 +405,7 @@ exports.AllSalesmanOrderReport = async (req, res) => {
 exports.AllSalesmanAssignBusinessReport = async (req, res) => {
     try {
 
-        const { limit, page, keyword } = req.query;
+        const { limit, page, keyword, status } = req.query;
 
         let query_count = `SELECT COUNT(*) AS total_records 
         FROM business 
@@ -426,6 +426,11 @@ exports.AllSalesmanAssignBusinessReport = async (req, res) => {
         if (business_salesman_id) {
             conditionCols.push(`business.business_salesman_id IN (?)`);
             conditionValue.push(business_salesman_id);
+        }
+
+        if (status) {
+            conditionCols.push(`business.is_active = ?`);
+            conditionValue.push(status);
         }
 
         if (keyword) {
@@ -537,3 +542,37 @@ exports.GetPartInfo = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Internal Server Error', error });
     }
 }
+
+
+exports.GetInactiveBusinessList = async (req, res) => {
+    try {
+        const [salesmen] = await pool.query(
+            `SELECT business_salesman_id FROM business__salesmans`
+        );
+
+        const salesman_ids = salesmen.map(s => s.business_salesman_id);
+
+        let business_in_active_list = [];
+
+        if (salesman_ids.length > 0) {
+            const [businesses] = await pool.query(
+                `SELECT business_id, business_name, business_mobile, is_active
+                 FROM business
+                 WHERE business_salesman_id IN (?)
+                 AND is_active = 0`,
+                [salesman_ids]
+            );
+
+            business_in_active_list = businesses;
+        }
+
+        return res.json({
+            success: true,
+            data: business_in_active_list
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.json({ success: false, message: "Internal server error", error });
+    }
+};

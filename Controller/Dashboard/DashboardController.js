@@ -1,5 +1,7 @@
 const pool = require("../../Config/db_pool");
 
+
+
 exports.GetDashboardData = async (req, res) => {
     try {
         const business_salesman_id = req.headers['business-salesman-id'];
@@ -8,63 +10,100 @@ exports.GetDashboardData = async (req, res) => {
             return res.json({ success: false, message: "Missing business-salesman-id header" });
         }
 
-        // 🟢 Get all business IDs of this salesman
+        // 🟢 Get business IDs of this salesman (ONLY non-deleted)
         const [businessRows] = await pool.query(
-            `SELECT business_id FROM business WHERE business_salesman_id = ?`,
+            `SELECT business_id 
+             FROM business 
+             WHERE business_salesman_id = ? AND business_is_deleted = '0'`,
             [business_salesman_id]
         );
 
         const businessIds = businessRows.map(b => b.business_id);
 
+        // 🟢 Get salesman info first (salesman must exist even without target)
+        const [salesmanRows] = await pool.query(
+            `SELECT * FROM business__salesmans WHERE business_salesman_id = ?`,
+            [business_salesman_id]
+        );
+
+        let salesman_info = null;
+
+        if (salesmanRows.length > 0) {
+            // Salesman exists → now get target (may not exist)
+            const [targetRows] = await pool.query(
+                `SELECT * FROM business__salesmans_targets WHERE business_salesman_id = ?`,
+                [business_salesman_id]
+            );
+
+            // Merge salesman + target
+            salesman_info = {
+                ...salesmanRows[0],
+                ...(targetRows[0] || {
+                    target_month: null,
+                    target_amount: null,
+                    achieved_amount: null
+                })
+            };
+        }
+
+        // If no businesses assigned
         if (businessIds.length === 0) {
             return res.json({
                 success: true,
                 data: {
-                    total_business: 0,
+                    total_assign_business: 0,
                     total_inactive_business: 0,
-                    total_orders: 0,
                     total_pending_orders: 0
-                }
+                },
+                salesman_info: salesman_info // <-- ALWAYS RETURN SALESMAN INFO
             });
         }
 
+        // 🟢 Total inactive businesses
         const [totalInactive] = await pool.query(
-            `SELECT COUNT(*) AS total_inactive_business FROM business WHERE business_salesman_id = ? AND is_active = 0 AND business_is_deleted = 0`,
+            `SELECT COUNT(*) AS total_inactive_business 
+             FROM business 
+             WHERE business_salesman_id = ? 
+             AND is_active = 0 
+             AND business_is_deleted = '0'`,
             [business_salesman_id]
         );
 
+        // 🟢 Total assigned business count
         const [totalBusiness] = await pool.query(
-            `SELECT COUNT(*) AS total_assign_business FROM business WHERE business_salesman_id = ? AND business_is_deleted = 0`,
+            `SELECT COUNT(*) AS total_assign_business 
+             FROM business 
+             WHERE business_salesman_id = ? 
+             AND business_is_deleted = '0'`,
             [business_salesman_id]
         );
 
         // 🟢 Total pending orders
         const [totalPending] = await pool.query(
-            `SELECT COUNT(*) AS total_pending_orders FROM business__orders WHERE business_order_business_id IN (?) AND business_order_status = 0`,
+            `SELECT COUNT(*) AS total_pending_orders 
+             FROM business__orders 
+             WHERE business_order_business_id IN (?) 
+             AND business_order_status = 0`,
             [businessIds]
         );
-
-        const [salesman_info] = await pool.query(`
-            SELECT * FROM business__salesmans
-            LEFT JOIN business__salesmans_targets ON business__salesmans.business_salesman_id = business__salesmans_targets.business_salesman_id
-            WHERE business__salesmans.business_salesman_id = ?`
-            , [business_salesman_id]);
 
         return res.json({
             success: true,
             data: {
-                total_assign_business: totalBusiness[0].total_assign_business || 0,
-                total_inactive_business: totalInactive[0].total_inactive_business || 0,
-                total_pending_orders: totalPending[0].total_pending_orders || 0
+                total_assign_business: totalBusiness[0]?.total_assign_business || 0,
+                total_inactive_business: totalInactive[0]?.total_inactive_business || 0,
+                total_pending_orders: totalPending[0]?.total_pending_orders || 0
             },
-            salesman_info: salesman_info[0]
+            salesman_info: salesman_info
         });
 
     } catch (error) {
-        console.log('error', error);
+        console.log('GetDashboardData error', error);
         return res.json({ success: false, message: "Internal server error", error });
     }
 };
+
+
 
 exports.GetBusinessesNoRecentOrders = async (req, res) => {
     try {
@@ -112,7 +151,6 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
         });
     }
 };
-
 
 exports.GetMonthlySalesBySalesman = async (req, res) => {
     try {
@@ -176,67 +214,91 @@ exports.GetSalesmanTargetChartData = async (req, res) => {
     try {
         const business_salesman_id = req.headers['business-salesman-id'];
 
-        // Fetch latest target row for salesman
+        if (!business_salesman_id) {
+            return res.json({ success: false, message: "Missing business-salesman-id header" });
+        }
+
+        // 1️⃣ Fetch latest target row for salesman
         const [targetRow] = await pool.query(
-            `SELECT business_salesman_target, business_salesman_target_from, business_salesman_target_to 
+            `SELECT 
+                business_salesman_target AS target_amount, 
+                business_salesman_target_from AS target_from, 
+                business_salesman_target_to AS target_to
              FROM business__salesmans_targets 
              WHERE business_salesman_id = ? 
              ORDER BY business_salesman_target_id DESC LIMIT 1`,
             [business_salesman_id]
         );
 
+        // If no target assigned → return zero achievement
         if (!targetRow || targetRow.length === 0) {
-            return res.status(404).json({ message: "Target not assigned" });
-        }
-
-        const target = targetRow[0];
-
-        // Fetch all businesses under this salesman
-        const [businesses] = await pool.query(
-            `SELECT business_id FROM business WHERE business_salesman_id = ?`,
-            [business_salesman_id]
-        );
-
-        const business_ids = businesses?.map(item => item.business_id) || [];
-
-        if (!business_ids.length) {
-            // No businesses found → No achievement
             return res.json({
-                total_target_amount: parseFloat(target.business_salesman_target),
-                total_achievement_amount: 0,
-                total_pending_amount: parseFloat(target.business_salesman_target)
+                success: true,
+                data: {
+                    total_target_amount: 0,
+                    total_achievement_amount: 0,
+                    total_pending_amount: 0
+                }
             });
         }
 
-        // Fetch orders for these businesses in target date range
+        const target = targetRow[0];
+        const targetAmount = parseFloat(target.target_amount);
+
+        // 2️⃣ Fetch all businesses under this salesman
+        const [businesses] = await pool.query(
+            `SELECT business_id 
+             FROM business 
+             WHERE business_salesman_id = ? AND business_is_deleted = '0'`,
+            [business_salesman_id]
+        );
+
+        const businessIds = businesses.map(b => b.business_id);
+
+        // If no businesses → achievement = 0
+        if (businessIds.length === 0) {
+            return res.json({
+                success: true,
+                data: {
+                    total_target_amount: targetAmount,
+                    total_achievement_amount: 0,
+                    total_pending_amount: targetAmount
+                }
+            });
+        }
+
+        // 3️⃣ Fetch total orders in date range
         const [orders] = await pool.query(
-            `SELECT SUM(business_order_grand_total) AS achievement
+            `SELECT 
+                SUM(business_order_grand_total) AS achievement
              FROM business__orders
              WHERE business_order_business_id IN (?)
              AND DATE(business_order_date) BETWEEN ? AND ?`,
             [
-                business_ids,
-                target.business_salesman_target_from,
-                target.business_salesman_target_to
+                businessIds,
+                target.target_from,
+                target.target_to
             ]
         );
 
-        const achievementAmount = orders[0].achievement || 0;
-        const targetAmount = parseFloat(target.business_salesman_target);
+        const achievementAmount = parseFloat(orders[0].achievement || 0);
+
+        // 4️⃣ Calculate pending amount
         const pendingAmount = Math.max(targetAmount - achievementAmount, 0);
 
         return res.json({
             success: true,
             data: {
-                total_target_amount: parseFloat(targetAmount).toFixed(2),
-                total_achievement_amount: parseFloat(achievementAmount).toFixed(2),
-                total_pending_amount: parseFloat(pendingAmount).toFixed(2)
+                total_target_amount: targetAmount,
+                total_achievement_amount: achievementAmount,
+                total_pending_amount: pendingAmount
             }
         });
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: "Server error" });
+        return res.json({ success: false, message: "Server error", error });
     }
 };
+
 

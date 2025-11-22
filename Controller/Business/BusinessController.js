@@ -8,43 +8,68 @@ const { PaginationQuery } = require("../Helper/QueryHelper");
 exports.GetBusinesses = async (req, res) => {
     try {
         const business_salesman_id = req.headers['business-salesman-id'];
-        const { limit, page, keyword } = req.query;
+        const { limit, page, keyword, status } = req.query;
 
-        let query_count = `SELECT COUNT(*) AS total_records
-         FROM business`
+        // 🛑 If salesman ID missing
+        if (!business_salesman_id) {
+            return res.json({ success: false, message: "Missing business-salesman-id header" });
+        }
 
-        let query = `SELECT * FROM business`;
+        // Base queries (non-deleted only)
+        let query_count = `
+            SELECT COUNT(*) AS total_records 
+            FROM business 
+            WHERE business_is_deleted = '0'
+        `;
+
+        let query = `
+            SELECT * 
+            FROM business 
+            WHERE business_is_deleted = '0'
+        `;
 
         let conditionValue = [];
-        let conditionCols = [];
 
+        // 🟢 Keyword filter
         if (keyword) {
-            conditionCols.push(`business.business_name = ?`);
-            conditionValue.push(keyword);
+            query += ` AND business.business_name LIKE ? `;
+            query_count += ` AND business.business_name LIKE ? `;
+            conditionValue.push(`%${keyword}%`);
         }
 
-        if (business_salesman_id) {
-            conditionCols.push(`business.business_salesman_id = ?`);
-            conditionValue.push(business_salesman_id);
+        // 🟢 Status filter
+        if (status) {
+            query += ` AND business.is_active = ? `;
+            query_count += ` AND business.is_active = ? `;
+            conditionValue.push(status);
         }
 
-        if (conditionCols.length > 0) {
-            query += " WHERE " + conditionCols.join(" AND ");
-            query_count += " WHERE " + conditionCols.join(" AND ");
-        }
+        // 🟢 IMPORTANT FIX: Always filter by salesman
+        query += ` AND business.business_salesman_id = ? `;
+        query_count += ` AND business.business_salesman_id = ? `;
+        conditionValue.push(business_salesman_id);
 
-        query += ` ORDER BY business.business_id DESC `;
-        query += ` LIMIT ?, ?`;
+        // Sorting + Limit
+        query += ` ORDER BY business.business_id DESC LIMIT ?, ?`;
 
+        // Pagination
+        const response = await PaginationQuery(
+            query_count,
+            query,
+            conditionValue,
+            limit,
+            page
+        );
 
-        const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
         return res.status(200).json(response);
 
     } catch (error) {
         console.log("Get Businesses error : ", error);
-        return res.json({ success: false, message: "Internal server error : ", error });
+        return res.json({ success: false, message: "Internal server error", error });
     }
-}
+};
+
+
 
 exports.GetBusinessInfo = async (req, res) => {
     try {
@@ -83,7 +108,7 @@ exports.GetBusinessesList = async (req, res) => {
         const business_salesman_id = req.headers['business-salesman-id'];
 
 
-        let query = "SELECT * FROM business WHERE business_salesman_id = ? AND business_is_deleted = 0";
+        let query = "SELECT * FROM business WHERE business_salesman_id = ? AND business_is_deleted = '0'";
 
         const [rows] = await pool.query(query, [business_salesman_id])
         return res.json({ success: true, data: rows })
@@ -186,46 +211,103 @@ exports.GetBusinessOrders = async (req, res) => {
     }
 };
 
-
 exports.GetOrderInfo = async (req, res) => {
     try {
-        const { business_order_id } = req.query;
+        const { business_id, secret_order_id } = req.query
 
-        if (!business_order_id) {
-            return res.status(400).json({ success: false, message: "order_id is required" });
+        if (!secret_order_id) {
+            return res.status(400).json({ success: false, message: 'Business Order ID is required' });
+        }
+
+        if (!business_id) {
+            return res.status(400).json({ success: false, message: 'Business ID is required' });
         }
 
         let query = `
-        SELECT 
-        business__orders.*,
-        business.*,
-        business__orders.business_order_address_id,
-        business__users.user_name AS order_by_name 
-        FROM business__orders
-        LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-        LEFT JOIN business__users ON business__orders.order_by = business__users.business_user_id
-        WHERE business_order_id = ?`;
+       SELECT 
+            *,
+            CASE business__orders.business_order_status
+            WHEN 0 THEN 'Pending'
+            WHEN 1 THEN 'Assigned'
+            WHEN 2 THEN 'Accepted'
+            WHEN 3 THEN 'Packed'
+            WHEN 4 THEN 'Shipped'
+            WHEN 5 THEN 'Delivered'
+            WHEN 6 THEN 'Cancelled'
+            WHEN 7 THEN 'Returned'
+            WHEN 8 THEN 'Returned Collected'
+            WHEN 9 THEN 'Returned Received'
+            ELSE 'Unknown'
+            END AS business_order_status_label, 
+            CONCAT('AED ', business_order_sub_total, '.00') AS display_sub_total,  
+            CONCAT('AED ', business_order_grand_total, '.00') AS display_grand_total,
+            ROUND(business_order_grand_total / 1.05, 2) AS grand_total_excl_vat,
+            ROUND(business_order_grand_total - (business_order_grand_total / 1.05), 2) AS grand_total_vat_amount,
+            CONCAT('AED ', ROUND(business_order_grand_total / 1.05, 2)) AS display_excl_vat,
+            CONCAT('AED ', ROUND(business_order_grand_total - (business_order_grand_total / 1.05), 2)) AS display_vat_amount
+            FROM business__orders
+            LEFT JOIN business 
+            ON business__orders.business_order_business_id = business.business_id
+            WHERE secret_order_id = ? 
+            AND business_order_business_id = ?;
+            `;
+
+        let [[result]] = await pool.query(query, [secret_order_id, business_id])
+
+        if (!result) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
 
         let items_query = `
-        SELECT 
-        business__orders_items.*,
-        business__orders.secret_order_id
-        FROM business__orders_items 
-        LEFT JOIN business__orders ON business__orders.business_order_id = business__orders_items.business_order_id
-        WHERE business__orders_items.business_order_id = ?`;
+            SELECT 
+                business_order_business_id AS business_id,
+                business_order_item_id AS item_id,
+                business_order_item_name AS item_name,
+                business_order_item_number AS item_number,
+                business_order_item_brand AS item_brand,
+                business_order_item_price AS item_price,
+                business_order_item_discount AS item_discount,
+                business_order_qty AS item_qty,
+                business_order_sub_total AS item_sub_total,
+                
+               
+                ROUND(business_order_item_price / 1.05, 2) AS item_price_excl_vat,
+                ROUND(business_order_item_price - (business_order_item_price / 1.05), 2) AS item_vat_amount,
+                
+                business_order_item_picture_url AS item_img_url,
+                business_order_item_url AS item_url, 
+                business__returns_items.*,
+                business__returns.*
+            FROM business__orders_items
 
+            LEFT JOIN business__returns_items ON business__orders_items.business_order_item_id = business__returns_items.business_return_order_item_id
+            LEFT JOIN business__returns ON business__returns_items.business_return_id = business__returns.business_return_id
+            WHERE business__orders_items.business_order_id = ?`;
 
-        let [result] = await pool.query(query, [business_order_id])
-        let [order_address] = await pool.query('SELECT * FROM business__addresses WHERE business_address_id = ?', [result[0]?.business_order_address_id ?? 0])
-        let [items_result] = await pool.query(items_query, [business_order_id])
+        var [items_result] = await pool.query(items_query, [result.business_order_id]);
 
-        return res.status(200).json({ success: true, data: result, items: items_result, order_address: order_address })
+        const uniqueItems = [];
+        const itemIds = new Set();
+        for (const item of items_result) {
+            if (!itemIds.has(item.item_id)) {
+                itemIds.add(item.item_id);
+                uniqueItems.push(item);
+            }
+        }
 
+        items_result = uniqueItems;
+
+        let addresses_query = `
+            SELECT * FROM business__addresses 
+            WHERE default_address = 1 AND business_id = ?`;
+        let [[addresses_result]] = await pool.query(addresses_query, [business_id]);
+
+        return res.status(200).json({ success: true, data: result, items: items_result, address: addresses_result });
     } catch (error) {
-        console.error("GetOrderInfo error: ", error);
-        return res.status(500).json({ success: false, message: "Internal server error", error });
+        console.error('Error:', error);
+        return res.status(500).json({ success: false, message: 'Internal Server Error', error });
     }
-};
+}
 
 
 // ------------- business Details wizard  // ------------- //
