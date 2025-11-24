@@ -103,8 +103,6 @@ exports.GetDashboardData = async (req, res) => {
     }
 };
 
-
-
 exports.GetBusinessesNoRecentOrders = async (req, res) => {
     try {
         const business_salesman_id = req.headers["business-salesman-id"];
@@ -116,6 +114,33 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
             });
         }
 
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        // Count total matched businesses
+        const [countRows] = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT b.business_id
+                FROM business b
+                LEFT JOIN business__orders o 
+                    ON b.business_id = o.business_order_business_id
+                WHERE b.business_salesman_id = ?
+                GROUP BY b.business_id
+                HAVING 
+                    MAX(o.business_order_date) IS NULL
+                    OR MAX(o.business_order_date) < DATE_SUB(CURDATE(), INTERVAL 2 DAY)
+            ) AS filtered
+            `,
+            [business_salesman_id]
+        );
+
+        const total_records = countRows[0].total;
+        const total_pages = Math.ceil(total_records / limit);
+
+        // Fetch business list with fallback to business_registered_date
         const [businesses] = await pool.query(
             `
             SELECT 
@@ -123,22 +148,42 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
                 b.business_name,
                 b.business_contact_number,
                 b.business_email,
-                MAX(o.business_order_date) AS last_order_date
+                MAX(o.business_order_date) AS last_order_date,
+
+                -- NEW: fallback value
+                CASE 
+                    WHEN MAX(o.business_order_date) IS NULL 
+                        THEN DATEDIFF(CURDATE(), b.business_registered_date)
+                    ELSE 
+                        DATEDIFF(CURDATE(), MAX(o.business_order_date))
+                END AS no_order_since_days
+
             FROM business b
             LEFT JOIN business__orders o 
                 ON b.business_id = o.business_order_business_id
             WHERE b.business_salesman_id = ?
             GROUP BY b.business_id, b.business_name, b.business_contact_number, b.business_email
+           
             HAVING 
                 last_order_date IS NULL 
                 OR last_order_date < DATE_SUB(CURDATE(), INTERVAL 2 DAY)
-            ORDER BY last_order_date ASC
+
+            ORDER BY 
+                no_order_since_days DESC,
+                last_order_date ASC
+
+            LIMIT ? OFFSET ?
             `,
-            [business_salesman_id]
+            [business_salesman_id, limit, offset]
         );
 
         return res.json({
             success: true,
+            total_records,
+            total_pages,
+            page,
+            next: page < total_pages,
+            prev: page > 1,
             data: businesses,
         });
 
@@ -152,63 +197,116 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
     }
 };
 
+// exports.GetMonthlySalesBySalesman = async (req, res) => {
+//     try {
+//         const business_salesman_id = req.headers["business-salesman-id"];
+//         const { year, month } = req.query;
+
+//         if (!business_salesman_id) {
+//             return res.json({ success: false, message: "Missing business-salesman-id header" });
+//         }
+
+//         if (!year || !month) {
+//             return res.json({ success: false, message: "Missing year or month parameter" });
+//         }
+
+//         // 🟢 Query monthly sales per business
+//         const [salesData] = await pool.query(
+//             `
+//             SELECT 
+//                 b.business_id,
+//                 b.business_name,
+//                 IFNULL(SUM(o.business_order_grand_total), 0) AS total_sales,
+//                 COUNT(o.business_order_id) AS total_orders
+//             FROM business b
+//             LEFT JOIN business__orders o
+//                 ON b.business_id = o.business_order_business_id
+//                 AND YEAR(o.business_order_date) = ?
+//                 AND MONTH(o.business_order_date) = ?
+//             WHERE b.business_salesman_id = ?
+//             GROUP BY b.business_id, b.business_name
+//             ORDER BY total_sales DESC
+//             `,
+//             [year, month, business_salesman_id]
+//         );
+
+//         // 🧮 Process data for charts
+//         const labels = salesData.map(row => row.business_name);
+//         const sales = salesData.map(row => Number(row.total_sales));
+//         const orders = salesData.map(row => Number(row.total_orders));
+//         const total_sales_overall = sales.reduce((sum, val) => sum + val, 0);
+
+//         return res.json({
+//             success: true,
+//             message: `Monthly sales chart data for ${year}-${month}`,
+//             labels,
+//             sales,
+//             orders,
+//             total_sales_overall,
+//         });
+
+//     } catch (error) {
+//         console.error("Error fetching chart data:", error);
+//         return res.json({
+//             success: false,
+//             message: "Internal server error while fetching chart data.",
+//             error: error.message
+//         });
+//     }
+// };
+
+
 exports.GetMonthlySalesBySalesman = async (req, res) => {
     try {
         const business_salesman_id = req.headers["business-salesman-id"];
-        const { year, month } = req.query;
+        const { from_date, to_date } = req.query;
 
         if (!business_salesman_id) {
             return res.json({ success: false, message: "Missing business-salesman-id header" });
         }
 
-        if (!year || !month) {
-            return res.json({ success: false, message: "Missing year or month parameter" });
+        if (!from_date || !to_date) {
+            return res.json({ success: false, message: "Missing from_date or to_date" });
         }
 
-        // 🟢 Query monthly sales per business
         const [salesData] = await pool.query(
             `
             SELECT 
-                b.business_id,
-                b.business_name,
+                DATE(o.business_order_date) AS order_date,
                 IFNULL(SUM(o.business_order_grand_total), 0) AS total_sales,
                 COUNT(o.business_order_id) AS total_orders
-            FROM business b
-            LEFT JOIN business__orders o
-                ON b.business_id = o.business_order_business_id
-                AND YEAR(o.business_order_date) = ?
-                AND MONTH(o.business_order_date) = ?
+            FROM business__orders o
+            INNER JOIN business b ON b.business_id = o.business_order_business_id
             WHERE b.business_salesman_id = ?
-            GROUP BY b.business_id, b.business_name
-            ORDER BY total_sales DESC
+            AND DATE(o.business_order_date) BETWEEN ? AND ?
+            GROUP BY DATE(o.business_order_date)
+            ORDER BY order_date ASC
             `,
-            [year, month, business_salesman_id]
+            [business_salesman_id, from_date, to_date]
         );
 
-        // 🧮 Process data for charts
-        const labels = salesData.map(row => row.business_name);
+        const labels = salesData.map(row => row.order_date);
         const sales = salesData.map(row => Number(row.total_sales));
         const orders = salesData.map(row => Number(row.total_orders));
-        const total_sales_overall = sales.reduce((sum, val) => sum + val, 0);
 
         return res.json({
             success: true,
-            message: `Monthly sales chart data for ${year}-${month}`,
+            message: "Sales chart data",
             labels,
             sales,
-            orders,
-            total_sales_overall,
+            orders
         });
 
     } catch (error) {
         console.error("Error fetching chart data:", error);
         return res.json({
             success: false,
-            message: "Internal server error while fetching chart data.",
+            message: "Internal server error",
             error: error.message
         });
     }
 };
+
 
 exports.GetSalesmanTargetChartData = async (req, res) => {
     try {

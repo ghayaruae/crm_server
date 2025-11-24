@@ -59,8 +59,8 @@ exports.GetRequestPartInquiry = async (req, res) => {
         let conditionCols = [];
 
         if (keyword) {
-            conditionCols.push(`inventory__part_requests.request_part_name LIKE ?`);
-            conditionValue.push(`%${keyword}%`);
+            conditionCols.push(`inventory__part_requests.request_part_name LIKE ? OR inventory__part_requests.request_part_number LIKE ?`);
+            conditionValue.push(`%${keyword}%`, `%${keyword}%`);
         }
 
         if (conditionCols.length > 0) {
@@ -113,20 +113,44 @@ exports.DeleteRequestPartInquery = async (req, res) => {
 exports.GetSalesmanPartInquiry = async (req, res) => {
     try {
 
-        const { business_salesman_id } = req.query;
+        const business_salesman_id = req.headers['business-salesman-id'];
 
-        if (!business_salesman_id) return res.json({ success: false, message: "business_salesman_id is required" });
 
-        const [rows] = await pool.query(`SELECT 
+        const { limit, page, keyword } = req.query;
+
+        let query_count = `SELECT COUNT(*) AS total_records FROM inventory__part_requests`;
+
+        let query = `SELECT 
          inventory__part_requests.*,
          business__salesmans.business_salesmen_name   
          FROM inventory__part_requests
          LEFT JOIN business__salesmans ON inventory__part_requests.business_salesman_id = business__salesmans.business_salesman_id
-         WHERE inventory__part_requests.business_salesman_id = ?
-         ORDER BY inventory__part_requests.inventory_part_request_id DESC
-         `, [business_salesman_id])
+         `;
 
-        return res.json({ success: true, data: rows })
+        let conditionValue = [];
+        let conditionCols = [];
+
+        if (business_salesman_id) {
+            conditionCols.push(`inventory__part_requests.business_salesman_id = ?`);
+            conditionValue.push(business_salesman_id);
+        }
+
+        if (keyword) {
+            conditionCols.push(`inventory__part_requests.request_part_name LIKE ? OR inventory__part_requests.request_part_number LIKE ?`);
+            conditionValue.push(`%${keyword}%`, `%${keyword}%`);
+        }
+
+        if (conditionCols.length > 0) {
+            const whereClause = " WHERE " + conditionCols.join(" AND ");
+            query += whereClause;
+            query_count += whereClause;
+        }
+
+        query += ` ORDER BY inventory__part_requests.inventory_part_request_id DESC LIMIT ?, ?`;
+
+        const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
+        return res.status(200).json(response);
+
 
     } catch (error) {
         console.log("error", error);
