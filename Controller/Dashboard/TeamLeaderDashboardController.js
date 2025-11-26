@@ -90,79 +90,83 @@ exports.GetTeamLeaderDashboardStates = async (req, res) => {
 
 exports.GetTargetAchievementReport = async (req, res) => {
     try {
-        // ✅ Step 1: Get all salesmen
+        // Step 1: Get all salesmen
         const [salesmen] = await pool.query(`
             SELECT *
             FROM business__salesmans
-            LEFT JOIN business__salesmans_targets ON business__salesmans.business_salesman_id = business__salesmans_targets.business_salesman_id`);
+        `);
 
         if (!salesmen.length) {
-            return res.json({ success: true, data: { above_target: [], below_target: [] } });
+            return res.json({
+                success: true,
+                data: { above_target: [], below_target: [] },
+            });
         }
 
         const aboveTarget = [];
         const belowTarget = [];
 
-        // ✅ Step 2: Loop through each salesman
+        // Step 2: Loop through each salesman
         for (const salesman of salesmen) {
             const salesman_id = salesman.business_salesman_id;
 
-            // --- Get total target ---
+            // --- Get all targets for this salesman
             const [targetRows] = await pool.query(
-                `SELECT 
-                    IFNULL(SUM(business_salesman_target), 0) AS total_target
+                `SELECT business_salesman_target, business_salesman_target_from, business_salesman_target_to
                  FROM business__salesmans_targets
-                 WHERE business_salesman_id = ?`,
+                 WHERE business_salesman_id = ?
+                 ORDER BY business_salesman_target_from ASC`,
                 [salesman_id]
             );
-            const total_target = targetRows[0]?.total_target || 0;
 
-            // --- Get all businesses under this salesman ---
+            // --- Get all businesses under this salesman
             const [businessRows] = await pool.query(
                 `SELECT business_id FROM business WHERE business_salesman_id = ?`,
                 [salesman_id]
             );
-
             const businessIds = businessRows.map(b => b.business_id);
-            let total_achievement = 0;
 
-            // --- Get total achieved sales ---
-            if (businessIds.length > 0) {
-                const [achievementRows] = await pool.query(
-                    `SELECT 
-                        IFNULL(SUM(business_order_grand_total), 0) AS total_achievement
-                     FROM business__orders 
-                     WHERE business_order_business_id IN (?)`,
-                    [businessIds]
-                );
-                total_achievement = achievementRows[0]?.total_achievement || 0;
-            }
+            // --- Loop through each target entry
+            for (const target of targetRows) {
+                let total_achievement = 0;
 
-            // --- Calculate difference ---
-            const difference = total_achievement - total_target;
+                // Get achievement for this target period only
+                if (businessIds.length > 0) {
+                    const [achievementRows] = await pool.query(
+                        `SELECT IFNULL(SUM(business_order_grand_total), 0) AS total_achievement
+                         FROM business__orders
+                         WHERE business_order_business_id IN (?)
+                           AND DATE(business_order_date) BETWEEN ? AND ?`,
+                        [businessIds, target.business_salesman_target_from, target.business_salesman_target_to]
+                    );
+                    total_achievement = achievementRows[0]?.total_achievement || 0;
+                }
 
-            // --- Create clean object ---
-            const dataObject = {
-                business_salesman_id: salesman.business_salesman_id,
-                business_salesman_name: salesman.business_salesmen_name,
-                business_salesman_email: salesman.business_salesman_email,
-                business_salesman_contact_number: salesman.business_salesmen_contact_number,
-                business_salesman_target_from: salesman.business_salesman_target_from,
-                business_salesman_target_to: salesman.business_salesman_target_to,
-                total_target,
-                total_achievement,
-                difference,
-            };
+                const difference = total_achievement - target.business_salesman_target;
 
-            // ✅ Separate into groups
-            if (difference >= 0) {
-                aboveTarget.push(dataObject);
-            } else {
-                belowTarget.push(dataObject);
+                // --- Create data object
+                const dataObject = {
+                    business_salesman_id: salesman.business_salesman_id,
+                    business_salesman_name: salesman.business_salesmen_name,
+                    business_salesman_email: salesman.business_salesman_email,
+                    business_salesman_contact_number: salesman.business_salesmen_contact_number,
+                    business_salesman_target_from: target.business_salesman_target_from,
+                    business_salesman_target_to: target.business_salesman_target_to,
+                    total_target: target.business_salesman_target,
+                    total_achievement,
+                    difference,
+                };
+
+                // --- Group by above/below target
+                if (difference >= 0) {
+                    aboveTarget.push(dataObject);
+                } else {
+                    belowTarget.push(dataObject);
+                }
             }
         }
 
-        // ✅ Return grouped data
+        // Step 3: Return grouped data
         return res.json({
             success: true,
             message: "Salesman target vs achievement report fetched successfully",

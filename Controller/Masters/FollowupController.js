@@ -32,6 +32,7 @@ exports.CreateFollowup = async (req, res) => {
 exports.GetFollowups = async (req, res) => {
     try {
         const { limit, page, keyword } = req.query;
+        const business_salesman_id = req.headers['business-salesman-id']
 
         let query_count = `
           SELECT COUNT(*) AS total_records
@@ -58,6 +59,11 @@ exports.GetFollowups = async (req, res) => {
         let conditionCols = [];
 
         // Searching
+        if (business_salesman_id) {
+            conditionCols.push(`f.business_salesman_id = ?`);
+            conditionValue.push(business_salesman_id);
+        }
+
         if (keyword) {
             conditionCols.push(`s.business_salesmen_name LIKE ?`);
             conditionValue.push(`%${keyword}%`);

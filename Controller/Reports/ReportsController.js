@@ -173,48 +173,63 @@ exports.GetBusinessAllOrdersReport = async (req, res) => {
 // ------------- target ------------- //
 exports.GetAllTargetReports = async (req, res) => {
     try {
-        let { from_date, to_date, business_salesman_id } = req.query;
+        let { from_date, to_date, business_salesman_id, page, limit } = req.query;
 
-        // Initialize base query and parameters
-        let query = `
-      SELECT 
-        bst.*,
-        bs.business_salesmen_name,
-        bs.business_salesmen_contact_number,
-        bs.business_salesman_email
-      FROM business__salesmans_targets bst
-      LEFT JOIN business__salesmans bs
-      ON bst.business_salesman_id = bs.business_salesman_id
-      WHERE 1=1
-    `;
+        // Default pagination values
+        page = parseInt(page) || 1;
+        limit = parseInt(limit) || 10;
+        const offset = (page - 1) * limit;
+
+        // Base query
+        let baseQuery = `
+            FROM business__salesmans_targets bst
+            LEFT JOIN business__salesmans bs
+            ON bst.business_salesman_id = bs.business_salesman_id
+            WHERE 1=1
+        `;
         const params = [];
 
-        // 🧩 Filter 1: Date range (handle if one or both are missing)
+        // Filters
         if (from_date && to_date) {
-            query += ` AND DATE(bst.target_assigned_datetime) BETWEEN ? AND ?`;
+            baseQuery += ` AND DATE(bst.target_assigned_datetime) BETWEEN ? AND ?`;
             params.push(from_date, to_date);
         } else if (from_date) {
-            query += ` AND DATE(bst.target_assigned_datetime) >= ?`;
+            baseQuery += ` AND DATE(bst.target_assigned_datetime) >= ?`;
             params.push(from_date);
         } else if (to_date) {
-            query += ` AND DATE(bst.target_assigned_datetime) <= ?`;
+            baseQuery += ` AND DATE(bst.target_assigned_datetime) <= ?`;
             params.push(to_date);
         }
 
-        // 🧩 Filter 2: Salesman ID
         if (business_salesman_id) {
-            query += ` AND bst.business_salesman_id = ?`;
+            baseQuery += ` AND bst.business_salesman_id = ?`;
             params.push(business_salesman_id);
         }
 
-        // 🧩 Optional: sort results by date
-        query += ` ORDER BY bst.target_assigned_datetime DESC`;
+        // 1️⃣ Get total records
+        const [countRows] = await pool.query(
+            `SELECT COUNT(*) as total_records ${baseQuery}`,
+            params
+        );
+        const total_records = countRows[0].total_records;
+        const total_pages = Math.ceil(total_records / limit);
 
-        const [rows] = await pool.query(query, params);
+        // 2️⃣ Get paginated data
+        const [rows] = await pool.query(
+            `SELECT bst.*, bs.business_salesmen_name, bs.business_salesmen_contact_number, bs.business_salesman_email 
+             ${baseQuery} 
+             ORDER BY bst.target_assigned_datetime DESC
+             LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        );
 
         return res.json({
             success: true,
-            count: rows.length,
+            total_records,
+            total_pages,
+            page,
+            next: page < total_pages,
+            prev: page > 1,
             data: rows,
         });
 
@@ -228,60 +243,75 @@ exports.GetAllTargetReports = async (req, res) => {
 };
 
 
-
 exports.GetAllFollowupsReports = async (req, res) => {
     try {
-        let { from_date, to_date, business_salesman_id } = req.query;
+        let { from_date, to_date, business_salesman_id, page, limit } = req.query;
 
-        // 🧩 Check if valid date filters provided
-        const hasDates = from_date && to_date;
+        // Default pagination
+        page = parseInt(page) || 1;
+        limit = parseInt(limit) || 10;
+        const offset = (page - 1) * limit;
 
         // Base query
-        let query = `
-            SELECT 
-                business__salesmans_followups.*,
-                business__salesmans.business_salesmen_name,
-                business__salesmans.business_salesmen_contact_number,
-                business__salesmans.business_salesman_email
+        let baseQuery = `
             FROM business__salesmans_followups
             LEFT JOIN business__salesmans 
-                ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id
+            ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id
             WHERE 1=1
         `;
-
         const params = [];
 
-        // ✅ Add date filter only if both dates exist
-        if (hasDates) {
-            query += ` AND DATE(business__salesmans_followups.business_salesman_followup_date) BETWEEN ? AND ?`;
+        // Date filter
+        if (from_date && to_date) {
+            baseQuery += ` AND DATE(business__salesmans_followups.business_salesman_followup_date) BETWEEN ? AND ?`;
             params.push(from_date, to_date);
         }
 
-        // ✅ Add salesman filter only if provided
+        // Salesman filter
         if (business_salesman_id) {
-            query += ` AND business__salesmans_followups.business_salesman_id = ?`;
+            baseQuery += ` AND business__salesmans_followups.business_salesman_id = ?`;
             params.push(business_salesman_id);
         }
 
-        // Execute query
-        const [rows] = await pool.query(query, params);
+        // 1️⃣ Get total records
+        const [countRows] = await pool.query(
+            `SELECT COUNT(*) as total_records ${baseQuery}`,
+            params
+        );
+        const total_records = countRows[0].total_records;
+        const total_pages = Math.ceil(total_records / limit);
+
+        // 2️⃣ Get paginated data
+        const [rows] = await pool.query(
+            `SELECT business__salesmans_followups.*, business__salesmans.business_salesmen_name,
+                    business__salesmans.business_salesmen_contact_number,
+                    business__salesmans.business_salesman_email
+             ${baseQuery}
+             ORDER BY business__salesmans_followups.business_salesman_followup_date DESC
+             LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        );
 
         return res.json({
             success: true,
+            total_records,
+            total_pages,
+            page,
+            next: page < total_pages,
+            prev: page > 1,
             data: rows,
         });
 
     } catch (error) {
         console.error("GetAllFollowupsReports Error:", error);
-        return res.json({
+        return res.status(500).json({
             success: false,
             message: "Internal server error",
-            error,
+            error: error.message,
         });
     }
 };
-
-
+ 
 // All salesman report //
 exports.AllSalesmanReport = async (req, res) => {
     try {
