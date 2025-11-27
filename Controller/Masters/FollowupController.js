@@ -186,15 +186,20 @@ exports.GetFollowupByBusiness = async (req, res) => {
             SELECT COUNT(*) AS total_records 
             FROM business__salesmans_followups
             LEFT JOIN business 
-                ON business__salesmans_followups.business_id = business.business_id
+            ON business__salesmans_followups.business_id = business.business_id
+            LEFT JOIN business__salesmans ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id 
         `;
 
         // MAIN QUERY
         let query = `
-            SELECT *
+            SELECT 
+            business__salesmans_followups.*,
+            business.business_name,
+            business__salesmans.business_salesmen_name
             FROM business__salesmans_followups
             LEFT JOIN business 
-                ON business__salesmans_followups.business_id = business.business_id
+            ON business__salesmans_followups.business_id = business.business_id
+            LEFT JOIN business__salesmans ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id 
         `;
 
         let conditionValue = [];
