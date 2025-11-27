@@ -87,7 +87,6 @@ exports.GetFollowups = async (req, res) => {
     }
 };
 
-
 exports.GetFollowupInfo = async (req, res) => {
     try {
         const { business_salesman_followup_id } = req.query;
@@ -122,11 +121,6 @@ exports.DeleteFollowup = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal Server Error", error });
     }
 }
-
-
-
-
-
 
 exports.GetFollowupsBySalesman = async (req, res) => {
     try {
@@ -177,5 +171,69 @@ exports.GetFollowupsBySalesman = async (req, res) => {
     } catch (error) {
         console.error(error);
         return res.status(500).json({ success: false, message: "Internal Server Error", error });
+    }
+};
+
+exports.GetFollowupByBusiness = async (req, res) => {
+    try {
+        const { business_id } = req.query;
+
+        if (!business_id)
+            return res.json({ success: false, message: "business_id is required" });
+
+        // COUNT QUERY
+        let query_count = `
+            SELECT COUNT(*) AS total_records 
+            FROM business__salesmans_followups
+            LEFT JOIN business 
+                ON business__salesmans_followups.business_id = business.business_id
+        `;
+
+        // MAIN QUERY
+        let query = `
+            SELECT *
+            FROM business__salesmans_followups
+            LEFT JOIN business 
+                ON business__salesmans_followups.business_id = business.business_id
+        `;
+
+        let conditionValue = [];
+        let conditionCols = [];
+
+        // Filter by Business ID
+        if (business_id) {
+            conditionCols.push(`business__salesmans_followups.business_id = ?`);
+            conditionValue.push(business_id);
+        }
+
+        // Apply WHERE conditions
+        if (conditionCols.length > 0) {
+            const whereClause = " WHERE " + conditionCols.join(" AND ");
+            query += whereClause;
+            query_count += whereClause;
+        }
+
+        // Sorting + Pagination
+        query += ` ORDER BY business__salesmans_followups.business_salesman_followup_id DESC `;
+        query += ` LIMIT ?, ?`;
+
+        // Run paginated query
+        const response = await PaginationQuery(
+            query_count,
+            query,
+            conditionValue,
+            req.query.limit,
+            req.query.page
+        );
+
+        return res.status(200).json(response);
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error
+        });
     }
 };

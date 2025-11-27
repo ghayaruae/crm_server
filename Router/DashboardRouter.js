@@ -14,6 +14,7 @@ const TeamLeaderDashboardController = require("../Controller/Dashboard/TeamLeade
 router.get("/GetTeamLeaderDashboardStates", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetTeamLeaderDashboardStates);
 router.get("/GetTargetAchievementReport", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetTargetAchievementReport);
 router.get("/GetLastPartInquiries", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetLastPartInquiries);
+router.get("/GetFollowTypeChart", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetFollowTypeChart);
 
 
 module.exports = router;

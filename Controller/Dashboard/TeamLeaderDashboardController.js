@@ -203,3 +203,33 @@ exports.GetLastPartInquiries = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal Server Error", error });
     }
 }
+
+exports.GetFollowTypeChart = async (req, res) => {
+    try {
+
+        const query = `
+            SELECT
+                COUNT(CASE WHEN business_salesman_followup_type = 'Meet' THEN 1 END) AS meet_count,
+                COUNT(CASE WHEN business_salesman_followup_type = 'Call' THEN 1 END) AS call_count,
+                COUNT(CASE WHEN business_salesman_followup_type = 'Visit' THEN 1 END) AS visit_count,
+                COUNT(CASE WHEN business_salesman_followup_type = 'Whatsapp' THEN 1 END) AS whatsapp_count,
+                COUNT(CASE WHEN business_salesman_followup_type = 'Mail' THEN 1 END) AS email_count
+            FROM business__salesmans_followups
+        `;
+
+        const [rows] = await pool.query(query);
+
+        return res.json({
+            success: true,
+            data: rows[0]
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error
+        });
+    }
+};

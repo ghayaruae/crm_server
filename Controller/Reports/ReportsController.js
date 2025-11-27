@@ -311,7 +311,7 @@ exports.GetAllFollowupsReports = async (req, res) => {
         });
     }
 };
- 
+
 // All salesman report //
 exports.AllSalesmanReport = async (req, res) => {
     try {
@@ -489,7 +489,7 @@ exports.AllSalesmanAssignBusinessReport = async (req, res) => {
 exports.GetInventoryCrossParts = async (req, res) => {
     try {
 
-        const { part_number, limit, page, SUP_ID } = req.query;
+        const { part_number, limit, page, SUP_ID, cross_type } = req.query;
 
         if (!part_number) {
             return res.json({ success: false, message: "part number is required" });
@@ -510,6 +510,11 @@ exports.GetInventoryCrossParts = async (req, res) => {
         if (SUP_ID) {
             conditionCols.push(`inventory__stock_cross.part_sup_id = ?`);
             conditionValue.push(SUP_ID);
+        }
+
+        if (cross_type) {
+            conditionCols.push(`inventory__stock_cross.cross_type = ?`);
+            conditionValue.push(cross_type);
         }
 
         if (conditionCols.length > 0) {

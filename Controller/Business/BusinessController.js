@@ -2,8 +2,6 @@ const pool = require("../../Config/db_pool");
 const { global } = require("../../Config/global");
 const { PaginationQuery } = require("../Helper/QueryHelper");
 
-
-
 // ------------- business orders api // ------------- //
 exports.GetBusinesses = async (req, res) => {
     try {
@@ -68,8 +66,6 @@ exports.GetBusinesses = async (req, res) => {
         return res.json({ success: false, message: "Internal server error", error });
     }
 };
-
-
 
 exports.GetBusinessInfo = async (req, res) => {
     try {
@@ -309,7 +305,6 @@ exports.GetOrderInfo = async (req, res) => {
     }
 }
 
-
 // ------------- business Details wizard  // ------------- //
 exports.GetBusinessDashboard = async (req, res) => {
     try {
@@ -457,7 +452,6 @@ exports.GetBusinessDocuments = async (req, res) => {
         });
     }
 };
-
 
 exports.GetBusinessBrands = async (req, res) => {
     try {
@@ -626,9 +620,6 @@ exports.GetBusinessDueDays = async (req, res) => {
         return res.json({ success: false, message: "Internal server error : ", error });
     }
 }
-
-// ------------- business Details wizard  ------------- //
-
 
 // ------------- business Details wizard  ------------- //
 exports.GetOrderTimeLine = async (req, res) => {

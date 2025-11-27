@@ -17,6 +17,7 @@ router.get("/GetSalesmanList", AuthMiddleware.AdminAuth, TargetController.GetSal
 router.get("/GetTargetsBySalesman", AuthMiddleware.AdminAuth, TargetController.GetTargetsBySalesman)
 router.get("/GetFollowupsBySalesman", AuthMiddleware.AdminAuth, FollowupController.GetFollowupsBySalesman)
 
+router.get("/GetFollowupByBusiness", AuthMiddleware.AdminAuth, FollowupController.GetFollowupByBusiness)
 
 
 /// Followup routing
