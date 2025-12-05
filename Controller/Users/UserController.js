@@ -85,7 +85,7 @@ const CreateUsers = async (req, data) => {
 
                 let privilege_fields = {
                     business_salesman_id: salesman_id,
-                    privilege_id: permission,
+                    salesman_privilage_id: permission,
                     privilege_view: 1,
                     privilege_edit: 0,
                     privilege_delete: 0,
