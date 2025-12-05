@@ -256,7 +256,9 @@ exports.GetAllFollowupsReports = async (req, res) => {
         let baseQuery = `
             FROM business__salesmans_followups
             LEFT JOIN business__salesmans 
-            ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id
+                ON business__salesmans_followups.business_salesman_id = business__salesmans.business_salesman_id
+            LEFT JOIN business
+                ON business__salesmans_followups.business_id = business.business_id
             WHERE 1=1
         `;
         const params = [];
@@ -275,17 +277,21 @@ exports.GetAllFollowupsReports = async (req, res) => {
 
         // 1️⃣ Get total records
         const [countRows] = await pool.query(
-            `SELECT COUNT(*) as total_records ${baseQuery}`,
+            `SELECT COUNT(*) AS total_records ${baseQuery}`,
             params
         );
+
         const total_records = countRows[0].total_records;
         const total_pages = Math.ceil(total_records / limit);
 
         // 2️⃣ Get paginated data
         const [rows] = await pool.query(
-            `SELECT business__salesmans_followups.*, business__salesmans.business_salesmen_name,
-                    business__salesmans.business_salesmen_contact_number,
-                    business__salesmans.business_salesman_email
+            `SELECT 
+                business__salesmans_followups.*, 
+                business__salesmans.business_salesmen_name,
+                business__salesmans.business_salesmen_contact_number,
+                business__salesmans.business_salesman_email,
+                business.business_name
              ${baseQuery}
              ORDER BY business__salesmans_followups.business_salesman_followup_date DESC
              LIMIT ? OFFSET ?`,
@@ -311,6 +317,7 @@ exports.GetAllFollowupsReports = async (req, res) => {
         });
     }
 };
+
 
 // All salesman report //
 exports.AllSalesmanReport = async (req, res) => {
@@ -577,7 +584,6 @@ exports.GetPartInfo = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Internal Server Error', error });
     }
 }
-
 
 exports.GetInactiveBusinessList = async (req, res) => {
     try {
