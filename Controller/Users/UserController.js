@@ -78,7 +78,7 @@ const CreateUsers = async (req, data) => {
         } else {
             const result = await pool.query("INSERT INTO business__salesmans SET ?", [fields]);
             const salesman_id = result[0].insertId;
-            const default_permissions = [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 22, 23, 27, 29, 30, 31, 32, 33]
+            const default_permissions = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 22, 23, 27, 29, 30, 31, 32, 33]
             for (let i = 0; i < default_permissions.length; i++) {
 
                 const permission = default_permissions[i];
