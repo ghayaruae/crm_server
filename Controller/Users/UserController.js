@@ -63,6 +63,7 @@ const CreateUsers = async (req, data) => {
             business_salesman_login_id: data?.business_salesman_login_id,
             business_salesman_login_password: data?.business_salesman_login_password,
             business_salesman_email: data?.business_salesman_email,
+            role: "Salesman",
             created_by: business_salesman_id,
             created_date: global.current_date,
         };
@@ -75,7 +76,22 @@ const CreateUsers = async (req, data) => {
             await pool.query("UPDATE business__salesmans SET ? WHERE business_salesman_id = ?", [fields, data.business_salesman_id]);
             return { success: true, message: "User updated successfully" };
         } else {
-            await pool.query("INSERT INTO business__salesmans SET ?", [fields]);
+            const result = await pool.query("INSERT INTO business__salesmans SET ?", [fields]);
+            const salesman_id = result[0].insertId;
+            const default_permissions = [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 22, 23, 27, 29, 30, 31, 32, 33]
+            for (let i = 0; i < default_permissions.length; i++) {
+
+                const permission = default_permissions[i];
+
+                let privilege_fields = {
+                    business_salesman_id: salesman_id,
+                    privilege_id: permission,
+                    privilege_view: 1,
+                    privilege_edit: 0,
+                    privilege_delete: 0,
+                }
+                await pool.query(`INSERT INTO business__salesman_privilage SET ?`, privilege_fields);
+            }
             return { success: true, message: "User created successfully" };
         }
     } catch (error) {
@@ -169,13 +185,11 @@ exports.GetUserInfo = async (req, res) => {
 exports.DeleteUser = async (req, res) => {
     try {
         const { business_salesman_id } = req.body;
-        if (!business_salesman_id)
-            return res.json({ success: false, message: "business_salesman_id is required..!" });
+        if (!business_salesman_id) return res.json({ success: false, message: "business_salesman_id is required..!" });
 
         const [result] = await pool.query("DELETE FROM business__salesmans WHERE business_salesman_id = ?", [business_salesman_id]);
 
-        if (result.affectedRows === 0)
-            return res.json({ success: false, message: "User not found" });
+        if (result.affectedRows === 0) return res.json({ success: false, message: "User not found" });
 
         return res.json({ success: true, message: "User deleted successfully..!" });
     } catch (error) {

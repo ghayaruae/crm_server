@@ -22,7 +22,6 @@ exports.UpdateSalesmanPermissions = async (req, res) => {
 
             await pool.query(`DELETE FROM business__salesman_privilage WHERE business_salesman_id = ?`, business_salesman_id);
 
-            // Now Insert The new permissions
             for (let i = 0; i < permissions.length; i++) {
 
                 const permission = permissions[i];
