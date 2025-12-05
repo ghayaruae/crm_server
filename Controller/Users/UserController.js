@@ -37,8 +37,11 @@ exports.Login = async (req, res) => {
              LEFT JOIN business__salesman_privilage_list 
              ON business__salesman_privilage.salesman_privilage_id = business__salesman_privilage_list.salesman_privilage_id
              WHERE business__salesman_privilage.business_salesman_id = ?`,
-            [user.business_salesman_login_id]
+            [user.business_salesman_id]
         );
+
+        console.log('permissions', permissions);
+
 
         return res.json({
             success: true,
