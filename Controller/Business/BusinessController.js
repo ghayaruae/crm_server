@@ -265,13 +265,15 @@ exports.GetOrderInfo = async (req, res) => {
                 business_order_item_discount AS item_discount,
                 business_order_qty AS item_qty,
                 business_order_sub_total AS item_sub_total,
-                
+                business__orders_items.item_status,
                
                 ROUND(business_order_item_price / 1.05, 2) AS item_price_excl_vat,
                 ROUND(business_order_item_price - (business_order_item_price / 1.05), 2) AS item_vat_amount,
                 
                 business_order_item_picture_url AS item_img_url,
                 business_order_item_url AS item_url, 
+
+
                 business__returns_items.*,
                 business__returns.*
             FROM business__orders_items
