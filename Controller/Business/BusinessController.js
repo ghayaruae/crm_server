@@ -118,7 +118,6 @@ exports.GetBusinessesList = async (req, res) => {
 exports.GetBusinessOrders = async (req, res) => {
     try {
         const business_salesman_id = req.headers['business-salesman-id'];
-        const { limit, page, business_name, keyword, status, from_date, to_date } = req.query;
 
         if (!business_salesman_id) {
             return res.status(400).json({
@@ -127,7 +126,9 @@ exports.GetBusinessOrders = async (req, res) => {
             });
         }
 
-        // Step 1: Get business IDs
+        // ==============================
+        // STEP 1 → Fetch Allowed business_ids
+        // ==============================
         const [businessRows] = await pool.query(
             `SELECT business_id FROM business WHERE business_salesman_id = ?`,
             [business_salesman_id]
@@ -135,73 +136,180 @@ exports.GetBusinessOrders = async (req, res) => {
 
         if (businessRows.length === 0) {
             return res.json({
-                success: false,
-                message: "No businesses found for this salesman"
+                success: true,
+                total_records: 0,
+                total_pages: 0,
+                page: 1,
+                next: false,
+                prev: false,
+                data: []
             });
         }
 
         const businessIds = businessRows.map(b => b.business_id);
         const placeholders = businessIds.map(() => '?').join(',');
 
-        // Base queries
-        let query_count = `
-      SELECT COUNT(*) as total_records
-      FROM business__orders
-      LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-      WHERE business__orders.business_order_business_id IN (${placeholders})
-    `;
+        // ==============================
+        // Filters
+        // ==============================
+        const conditionCols = [];
+        const conditionValue = [...businessIds];
 
-        let query = `
-      SELECT business__orders.*, business.business_name
-      FROM business__orders
-      LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-      WHERE business__orders.business_order_business_id IN (${placeholders})
-    `;
-
-        // Conditions
-        let conditionValue = [...businessIds];
-        let conditions = [];
-
-        if (business_name) {
-            conditions.push(`business.business_name LIKE ?`);
-            conditionValue.push(`%${business_name}%`);
+        if (req.query.business_name) {
+            conditionCols.push(`business.business_name LIKE ?`);
+            conditionValue.push(`%${req.query.business_name}%`);
         }
 
-        if (keyword) {
-            conditions.push(`business__orders.secret_order_id LIKE ?`);
-            conditionValue.push(`%${keyword}%`);
+        const statusFilter = req.query.type || req.query.status;
+        if (statusFilter) {
+            conditionCols.push(`business__orders.business_order_status = ?`);
+            conditionValue.push(statusFilter);
         }
 
-        if (status) {
-            conditions.push(`business__orders.business_order_status = ?`);
-            conditionValue.push(status);
+        if (req.query.keyword) {
+            conditionCols.push(`business__orders.secret_order_id LIKE ?`);
+            conditionValue.push(`%${req.query.keyword}%`);
         }
 
-        if (from_date && to_date) {
-            conditions.push(`DATE(business__orders.business_order_date) BETWEEN ? AND ?`);
-            conditionValue.push(from_date, to_date);
+        if (req.query.from_date && req.query.to_date) {
+            conditionCols.push(`DATE(business__orders.business_order_date) BETWEEN ? AND ?`);
+            conditionValue.push(req.query.from_date, req.query.to_date);
         }
 
-        // Add conditions
-        if (conditions.length > 0) {
-            const conditionStr = " AND " + conditions.join(" AND ");
-            query += conditionStr;
-            query_count += conditionStr;
+        const where = conditionCols.length > 0
+            ? " AND " + conditionCols.join(" AND ")
+            : "";
+
+        // ==============================
+        // Sort Order (ASC / DESC)
+        // ==============================
+        const sort_order = (req.query.sort_order || "DESC").toUpperCase();
+
+        // ==============================
+        // Pagination
+        // ==============================
+        const limit = req.query.limit ? Number(req.query.limit) : 20;
+        const page = req.query.page ? Number(req.query.page) : 1;
+        const start = (page - 1) * limit;
+
+        // ==============================
+        // Step 2 → Fetch Only Order IDs
+        // ==============================
+        const orderIdQuery = `
+            SELECT DISTINCT business__orders.business_order_id
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            WHERE business__orders.business_order_business_id IN (${placeholders})
+            ${where}
+            ORDER BY business__orders.business_order_id ${sort_order}
+            LIMIT ?, ?
+        `;
+
+        const [orderIdRows] = await pool.query(orderIdQuery, [...conditionValue, start, limit]);
+
+        if (orderIdRows.length === 0) {
+            return res.json({
+                success: true,
+                total_records: 0,
+                total_pages: 0,
+                page,
+                next: false,
+                prev: false,
+                data: []
+            });
         }
 
-        query += ` ORDER BY business__orders.business_order_id DESC LIMIT ?, ?`;
+        const orderIds = orderIdRows.map(r => r.business_order_id);
 
-        const limitNum = parseInt(limit) || 10;
-        const pageNum = parseInt(page) || 1;
+        // ==============================
+        // Step 3 → Total Records
+        // ==============================
+        const totalQuery = `
+            SELECT COUNT(DISTINCT business__orders.business_order_id) AS total_records
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            WHERE business__orders.business_order_business_id IN (${placeholders})
+            ${where}
+        `;
 
-        const response = await PaginationQuery(query_count, query, conditionValue, limitNum, pageNum);
-        return res.status(200).json(response);
+        const [[countRow]] = await pool.query(totalQuery, conditionValue);
+        const total_records = countRow.total_records;
+        const total_pages = Math.ceil(total_records / limit);
+
+        // ==============================
+        // Step 4 → Fetch Full Order + Items
+        // ==============================
+        const fullDataQuery = `
+            SELECT business__orders.*, business.*, business__orders_items.*
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            LEFT JOIN business__orders_items ON business__orders.business_order_id = business__orders_items.business_order_id
+            WHERE business__orders.business_order_id IN (${orderIds.join(",")})
+            ORDER BY business__orders.business_order_id ${sort_order}
+        `;
+
+        const [rows] = await pool.query(fullDataQuery);
+
+        // ==============================
+        // Step 5 → Combine Items + Correct Total
+        // ==============================
+        const ordersMap = {};
+
+        rows.forEach(row => {
+            const id = row.business_order_id;
+
+            if (!ordersMap[id]) {
+                ordersMap[id] = {
+                    ...row,
+                    items: [],
+                    corrected_grand_total: Number(row.business_order_grand_total) || 0
+                };
+            }
+
+            ordersMap[id].items.push(row);
+
+            if (Number(row.item_status) === 4) {
+                const itemTotal =
+                    (Number(row.business_order_item_price) || 0) *
+                    (Number(row.business_order_qty) || 0);
+                ordersMap[id].corrected_grand_total -= itemTotal;
+            }
+        });
+
+        // ==============================
+        // Step 6 → Stable Sorting
+        // ==============================
+        let finalData = Object.values(ordersMap).sort((a, b) => {
+            if (sort_order === "ASC") {
+                return a.business_order_id - b.business_order_id;
+            }
+            return b.business_order_id - a.business_order_id;
+        });
+
+        // Add display field
+        finalData = finalData.map(order => ({
+            ...order,
+            display_corrected_grand_total: `AED ${order.corrected_grand_total.toFixed(2)}`
+        }));
+
+        // ==============================
+        // Final Response
+        // ==============================
+        return res.status(200).json({
+            success: true,
+            total_records,
+            total_pages,
+            page,
+            next: page < total_pages,
+            prev: page > 1,
+            data: finalData
+        });
 
     } catch (error) {
-        console.error("GetBusinessOrders SQL Error:", error.sqlMessage || error.message, error.sql);
+        console.error(error);
         return res.status(500).json({
             success: false,
-            message: "Internal server error",
+            message: "Internal Server Error",
             error: error.message
         });
     }
@@ -209,7 +317,7 @@ exports.GetBusinessOrders = async (req, res) => {
 
 exports.GetOrderInfo = async (req, res) => {
     try {
-        const { business_id, secret_order_id } = req.query
+        const { business_id, secret_order_id } = req.query;
 
         if (!secret_order_id) {
             return res.status(400).json({ success: false, message: 'Business Order ID is required' });
@@ -219,93 +327,141 @@ exports.GetOrderInfo = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Business ID is required' });
         }
 
-        let query = `
-       SELECT 
+        // ==============================
+        // ORDER DETAILS
+        // ==============================
+        const orderQuery = `
+        SELECT 
             *,
             CASE business__orders.business_order_status
-            WHEN 0 THEN 'Pending'
-            WHEN 1 THEN 'Assigned'
-            WHEN 2 THEN 'Accepted'
-            WHEN 3 THEN 'Packed'
-            WHEN 4 THEN 'Shipped'
-            WHEN 5 THEN 'Delivered'
-            WHEN 6 THEN 'Cancelled'
-            WHEN 7 THEN 'Returned'
-            WHEN 8 THEN 'Returned Collected'
-            WHEN 9 THEN 'Returned Received'
-            ELSE 'Unknown'
-            END AS business_order_status_label, 
-            CONCAT('AED ', business_order_sub_total, '.00') AS display_sub_total,  
+                WHEN 0 THEN 'Pending'
+                WHEN 1 THEN 'Assigned'
+                WHEN 2 THEN 'Accepted'
+                WHEN 3 THEN 'Packed'
+                WHEN 4 THEN 'Shipped'
+                WHEN 5 THEN 'Delivered'
+                WHEN 6 THEN 'Cancelled'
+                WHEN 7 THEN 'Returned'
+                WHEN 8 THEN 'Returned Collected'
+                WHEN 9 THEN 'Returned Received'
+                ELSE 'Unknown'
+            END AS business_order_status_label,
+
+            CONCAT('AED ', business_order_sub_total, '.00') AS display_sub_total,
             CONCAT('AED ', business_order_grand_total, '.00') AS display_grand_total,
+
             ROUND(business_order_grand_total / 1.05, 2) AS grand_total_excl_vat,
             ROUND(business_order_grand_total - (business_order_grand_total / 1.05), 2) AS grand_total_vat_amount,
+
             CONCAT('AED ', ROUND(business_order_grand_total / 1.05, 2)) AS display_excl_vat,
             CONCAT('AED ', ROUND(business_order_grand_total - (business_order_grand_total / 1.05), 2)) AS display_vat_amount
-            FROM business__orders
-            LEFT JOIN business 
-            ON business__orders.business_order_business_id = business.business_id
-            WHERE secret_order_id = ? 
-            AND business_order_business_id = ?;
-            `;
 
-        let [[result]] = await pool.query(query, [secret_order_id, business_id])
+        FROM business__orders
+        LEFT JOIN business 
+            ON business__orders.business_order_business_id = business.business_id
+        WHERE secret_order_id = ? 
+        AND business_order_business_id = ?
+        LIMIT 1
+        `;
+
+        let [[result]] = await pool.query(orderQuery, [secret_order_id, business_id]);
 
         if (!result) {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
 
-        let items_query = `
+        // ==============================
+        // ORDER ITEMS + RETURNS + STORE
+        // ==============================
+        const itemsQuery = `
             SELECT 
-                business_order_business_id AS business_id,
-                business_order_item_id AS item_id,
-                business_order_item_name AS item_name,
-                business_order_item_number AS item_number,
-                business_order_item_brand AS item_brand,
-                business_order_item_price AS item_price,
-                business_order_item_discount AS item_discount,
-                business_order_qty AS item_qty,
-                business_order_sub_total AS item_sub_total,
-                business__orders_items.item_status,
-               
-                ROUND(business_order_item_price / 1.05, 2) AS item_price_excl_vat,
-                ROUND(business_order_item_price - (business_order_item_price / 1.05), 2) AS item_vat_amount,
-                
-                business_order_item_picture_url AS item_img_url,
-                business_order_item_url AS item_url, 
+                boi.item_status,
 
+                boi.business_order_business_id AS business_id,
+                boi.business_order_item_id AS item_id,
+                boi.business_order_item_name AS item_name,
+                boi.business_order_item_number AS item_number,
+                boi.business_order_item_brand AS item_brand,
+                boi.business_order_item_price AS item_price,
+                boi.business_order_item_discount AS item_discount,
+                boi.business_order_qty AS item_qty,
+                boi.business_order_sub_total AS item_sub_total,
 
-                business__returns_items.*,
-                business__returns.*
-            FROM business__orders_items
+                ROUND(boi.business_order_item_price / 1.05, 2) AS item_price_excl_vat,
+                ROUND(boi.business_order_item_price - (boi.business_order_item_price / 1.05), 2) AS item_vat_amount,
 
-            LEFT JOIN business__returns_items ON business__orders_items.business_order_item_id = business__returns_items.business_return_order_item_id
-            LEFT JOIN business__returns ON business__returns_items.business_return_id = business__returns.business_return_id
-            WHERE business__orders_items.business_order_id = ?`;
+                boi.business_order_item_picture_url AS item_img_url,
+                boi.business_order_item_url AS item_url,
 
-        var [items_result] = await pool.query(items_query, [result.business_order_id]);
+                bri.*, 
+                br.*,
+                stores.store_name
 
-        const uniqueItems = [];
-        const itemIds = new Set();
-        for (const item of items_result) {
-            if (!itemIds.has(item.item_id)) {
-                itemIds.add(item.item_id);
-                uniqueItems.push(item);
-            }
-        }
+            FROM business__orders_items AS boi
+            LEFT JOIN business__returns_items AS bri 
+                ON boi.business_order_item_id = bri.business_return_order_item_id
+            LEFT JOIN business__returns AS br
+                ON bri.business_return_id = br.business_return_id
+            LEFT JOIN inventory__stores AS stores
+                ON boi.business_order_item_store_id = stores.store_id
 
-        items_result = uniqueItems;
+            WHERE boi.business_order_id = ?
+        `;
 
-        let addresses_query = `
+        let [items] = await pool.query(itemsQuery, [result.business_order_id]);
+
+        // Remove duplicates
+        const unique = {};
+        items.forEach(i => unique[i.item_id] = i);
+        items = Object.values(unique);
+
+        // ==============================
+        // MINUS RETURNED ITEMS (item_status = 4)
+        // ==============================
+        const returnedItems = items.filter(it => Number(it.item_status) === 4);
+
+        const totalReturnedSubTotal = returnedItems.reduce((s, it) => s + Number(it.item_sub_total || 0), 0);
+        const totalReturnedExclVat = returnedItems.reduce((s, it) => s + Number(it.item_price_excl_vat || 0), 0);
+        const totalReturnedVatAmount = returnedItems.reduce((s, it) => s + Number(it.item_vat_amount || 0), 0);
+
+        // Corrected totals
+        const correctedGrandTotal = Number(result.business_order_grand_total) - totalReturnedSubTotal;
+        const correctedExclVat = Number(result.grand_total_excl_vat) - totalReturnedExclVat;
+        const correctedVatAmount = Number(result.grand_total_vat_amount) - totalReturnedVatAmount;
+
+        // Attach in result
+        result.corrected_grand_total = correctedGrandTotal;
+        result.display_corrected_grand_total = `AED ${correctedGrandTotal.toFixed(2)}`;
+
+        result.corrected_total_excl_vat = correctedExclVat;
+        result.display_corrected_excl_vat = `AED ${correctedExclVat.toFixed(2)}`;
+
+        result.corrected_vat_amount = correctedVatAmount;
+        result.display_corrected_vat_amount = `AED ${correctedVatAmount.toFixed(2)}`;
+
+        // ==============================
+        // BUSINESS ADDRESS
+        // ==============================
+        const addressQuery = `
             SELECT * FROM business__addresses 
-            WHERE default_address = 1 AND business_id = ?`;
-        let [[addresses_result]] = await pool.query(addresses_query, [business_id]);
+            WHERE default_address = 1 AND business_id = ?
+            LIMIT 1
+        `;
+        const [[address]] = await pool.query(addressQuery, [business_id]);
 
-        return res.status(200).json({ success: true, data: result, items: items_result, address: addresses_result });
+        return res.status(200).json({
+            success: true,
+            data: result,
+            items,
+            address
+        });
+
     } catch (error) {
-        console.error('Error:', error);
-        return res.status(500).json({ success: false, message: 'Internal Server Error', error });
+        console.error("GetOrderInfo Error:", error);
+        return res.status(500).json({ success: false, message: "Internal Server Error", error });
     }
-}
+};
+
 
 // ------------- business Details wizard  // ------------- //
 exports.GetBusinessDashboard = async (req, res) => {

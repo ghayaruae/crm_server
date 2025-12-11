@@ -86,7 +86,6 @@ exports.GetBusinessOrdersReport = async (req, res) => {
 exports.GetBusinessAllOrdersReport = async (req, res) => {
     try {
         const { from_date, to_date, page, limit, keyword, status } = req.query;
-
         const business_salesman_id = req.headers['business-salesman-id'];
 
         if (!business_salesman_id) {
@@ -96,7 +95,9 @@ exports.GetBusinessAllOrdersReport = async (req, res) => {
             });
         }
 
-        // Step 1: Get business IDs
+        // ==============================
+        // Step 1 → Get business IDs
+        // ==============================
         const [businessRows] = await pool.query(
             `SELECT business_id FROM business WHERE business_salesman_id = ?`,
             [business_salesman_id]
@@ -110,65 +111,158 @@ exports.GetBusinessAllOrdersReport = async (req, res) => {
         }
 
         const businessIds = businessRows.map(b => b.business_id);
-        const placeholders = businessIds.map(() => '?').join(',');
+        const placeholders = businessIds.map(() => "?").join(",");
 
-        // Base queries
-        let query_count = `
-          SELECT COUNT(*) as total_records
-          FROM business__orders
-          LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-          WHERE business__orders.business_order_business_id IN (${placeholders})
-        `;
-
-        let query = `
-          SELECT business__orders.*, business.business_name
-          FROM business__orders
-          LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-          WHERE business__orders.business_order_business_id IN (${placeholders})
-        `;
-
-        // Conditions
-        let conditionValue = [...businessIds];
-        let conditions = [];
+        // ==============================
+        // Step 2 → Filters
+        // ==============================
+        const conditionCols = [
+            `business__orders.business_order_business_id IN (${placeholders})`
+        ];
+        const conditionValue = [...businessIds];
 
         if (keyword) {
-            conditions.push(`business__orders.business_order_business_id LIKE ?`);
+            conditionCols.push(`business.business_name LIKE ?`);
             conditionValue.push(`%${keyword}%`);
         }
 
-        if (from_date && to_date) {
-            conditions.push(`DATE(business__orders.business_order_date) BETWEEN ? AND ?`);
-            conditionValue.push(from_date, to_date);
-        }
-
         if (status) {
-            conditions.push(`business__orders.business_order_status = ?`);
+            conditionCols.push(`business__orders.business_order_status = ?`);
             conditionValue.push(status);
         }
 
-        // Add conditions
-        if (conditions.length > 0) {
-            const conditionStr = " AND " + conditions.join(" AND ");
-            query += conditionStr;
-            query_count += conditionStr;
+        if (from_date && to_date) {
+            conditionCols.push(`DATE(business__orders.business_order_date) BETWEEN ? AND ?`);
+            conditionValue.push(from_date, to_date);
         }
 
-        query += ` ORDER BY business__orders.business_order_id DESC LIMIT ?, ?`;
+        const where = "WHERE " + conditionCols.join(" AND ");
 
-        const limitNum = parseInt(limit) || 10;
-        const pageNum = parseInt(page) || 1;
+        // ==============================
+        // Sort + Pagination
+        // ==============================
+        const sort_order = (req.query.sort_order || "DESC").toUpperCase();
+        const limitNum = Number(limit) || 20;
+        const pageNum = Number(page) || 1;
+        const start = (pageNum - 1) * limitNum;
 
-        const response = await PaginationQuery(query_count, query, conditionValue, limitNum, pageNum);
-        return res.status(200).json(response);
+        // ==============================
+        // Step 3 → Fetch ONLY Order IDs
+        // ==============================
+        const orderIdQuery = `
+            SELECT DISTINCT business__orders.business_order_id
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            ${where}
+            ORDER BY business__orders.business_order_id ${sort_order}
+            LIMIT ?, ?
+        `;
+
+        const [orderIdRows] = await pool.query(orderIdQuery, [...conditionValue, start, limitNum]);
+
+        if (orderIdRows.length === 0) {
+            return res.json({
+                success: true,
+                total_records: 0,
+                total_pages: 0,
+                page: pageNum,
+                next: false,
+                prev: false,
+                data: []
+            });
+        }
+
+        const orderIds = orderIdRows.map(r => r.business_order_id);
+
+        // ==============================
+        // Step 4 → Count total records
+        // ==============================
+        const totalQuery = `
+            SELECT COUNT(DISTINCT business__orders.business_order_id) AS total_records
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            ${where}
+        `;
+
+        const [[countRow]] = await pool.query(totalQuery, conditionValue);
+        const total_records = countRow.total_records;
+        const total_pages = Math.ceil(total_records / limitNum);
+
+        // ==============================
+        // Step 5 → Full Order Details
+        // ==============================
+        const fullDataQuery = `
+            SELECT business__orders.*, business.*, business__orders_items.*
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            LEFT JOIN business__orders_items ON business__orders.business_order_id = business__orders_items.business_order_id
+            WHERE business__orders.business_order_id IN (${orderIds.join(",")})
+            ORDER BY business__orders.business_order_id ${sort_order}
+        `;
+
+        const [rows] = await pool.query(fullDataQuery);
+
+        // ==============================
+        // Step 6 → Merge items + corrected total
+        // ==============================
+        const ordersMap = {};
+
+        rows.forEach(row => {
+            const id = row.business_order_id;
+
+            if (!ordersMap[id]) {
+                ordersMap[id] = {
+                    ...row,
+                    items: [],
+                    corrected_grand_total: Number(row.business_order_grand_total) || 0
+                };
+            }
+
+            ordersMap[id].items.push(row);
+
+            if (Number(row.item_status) === 4) {
+                const itemTotal =
+                    (Number(row.business_order_item_price) || 0) *
+                    (Number(row.business_order_qty) || 0);
+                ordersMap[id].corrected_grand_total -= itemTotal;
+            }
+        });
+
+        // ==============================
+        // Step 7 → Stable sorting
+        // ==============================
+        let finalData = Object.values(ordersMap).sort((a, b) => {
+            if (sort_order === "ASC") return a.business_order_id - b.business_order_id;
+            return b.business_order_id - a.business_order_id;
+        });
+
+        finalData = finalData.map(order => ({
+            ...order,
+            display_corrected_grand_total: `AED ${order.corrected_grand_total.toFixed(2)}`
+        }));
+
+        // ==============================
+        // Final Output
+        // ==============================
+        return res.status(200).json({
+            success: true,
+            total_records,
+            total_pages,
+            page: pageNum,
+            next: pageNum < total_pages,
+            prev: pageNum > 1,
+            data: finalData
+        });
+
     } catch (error) {
-        console.error("GetBusinessOrders SQL Error:", error.sqlMessage || error.message, error.sql);
+        console.error(error);
         return res.status(500).json({
             success: false,
-            message: "Internal server error",
+            message: "Internal Server Error",
             error: error.message
         });
     }
-}
+};
 
 // ------------- target ------------- //
 exports.GetAllTargetReports = async (req, res) => {
@@ -241,7 +335,6 @@ exports.GetAllTargetReports = async (req, res) => {
         });
     }
 };
-
 
 exports.GetAllFollowupsReports = async (req, res) => {
     try {
@@ -318,7 +411,6 @@ exports.GetAllFollowupsReports = async (req, res) => {
     }
 };
 
-
 // All salesman report //
 exports.AllSalesmanReport = async (req, res) => {
     try {
@@ -356,88 +448,190 @@ exports.AllSalesmanOrderReport = async (req, res) => {
     try {
         const { limit, page, keyword, salesman_name, status, from_date, to_date } = req.query;
 
-        // Base queries
-        let query_count = `
-            SELECT COUNT(*) AS total_records
-            FROM business__orders 
-            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-            LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
-            WHERE business.business_salesman_id IS NOT NULL
-        `;
-
-        let query = `
-            SELECT
-                business__orders.*, 
-                business.business_name, 
-                business.business_salesman_id,
-                business__salesmans.business_salesmen_name
-            FROM business__orders 
-            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
-            LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
-            WHERE business.business_salesman_id IS NOT NULL
-        `;
-
+        // ==============================
+        // Filters
+        // ==============================
+        const conditionCols = [`business.business_salesman_id IS NOT NULL`];
         const conditionValue = [];
 
-        // Keyword search (business name)
+        // Business name search
         if (keyword) {
-            query += ` AND business.business_name LIKE ?`;
-            query_count += ` AND business.business_name LIKE ?`;
+            conditionCols.push(`business.business_name LIKE ?`);
             conditionValue.push(`%${keyword}%`);
         }
 
-        // Salesman filter
+        // Salesman name search
         if (salesman_name) {
-            query += ` AND business__salesmans.business_salesmen_name LIKE ?`;
-            query_count += ` AND business__salesmans.business_salesmen_name LIKE ?`;
+            conditionCols.push(`business__salesmans.business_salesmen_name LIKE ?`);
             conditionValue.push(`%${salesman_name}%`);
         }
 
-        // ✅ Status filter (handles single or multiple)
+        // Status (supports array or CSV)
         if (status) {
             const statusArray = Array.isArray(status)
                 ? status
-                : typeof status === "string" && status.includes(",")
+                : status.includes(",")
                     ? status.split(",")
                     : [status];
 
-            const placeholders = statusArray.map(() => "?").join(", ");
-            query += ` AND business__orders.business_order_status IN (${placeholders})`;
-            query_count += ` AND business__orders.business_order_status IN (${placeholders})`;
+            const placeholders = statusArray.map(() => `?`).join(",");
+            conditionCols.push(`business__orders.business_order_status IN (${placeholders})`);
             conditionValue.push(...statusArray);
         }
 
-        // Date range filter
+        // Date range
         if (from_date && to_date) {
-            query += ` AND DATE(business__orders.business_order_date) BETWEEN ? AND ?`;
-            query_count += ` AND DATE(business__orders.business_order_date) BETWEEN ? AND ?`;
+            conditionCols.push(`DATE(business__orders.business_order_date) BETWEEN ? AND ?`);
             conditionValue.push(from_date, to_date);
         } else if (from_date) {
-            query += ` AND DATE(business__orders.business_order_date) >= ?`;
-            query_count += ` AND DATE(business__orders.business_order_date) >= ?`;
+            conditionCols.push(`DATE(business__orders.business_order_date) >= ?`);
             conditionValue.push(from_date);
         } else if (to_date) {
-            query += ` AND DATE(business__orders.business_order_date) <= ?`;
-            query_count += ` AND DATE(business__orders.business_order_date) <= ?`;
+            conditionCols.push(`DATE(business__orders.business_order_date) <= ?`);
             conditionValue.push(to_date);
         }
 
-        // Final ordering and pagination
-        query += ` ORDER BY business__orders.business_order_id DESC LIMIT ?, ?`;
+        const where = conditionCols.length > 0
+            ? "WHERE " + conditionCols.join(" AND ")
+            : "";
 
-        // Call pagination helper
-        const response = await PaginationQuery(query_count, query, conditionValue, limit, page);
+        // ==============================
+        // Sort Order
+        // ==============================
+        const sort_order = (req.query.sort_order || "DESC").toUpperCase();
 
-        return res.status(200).json(response);
+        // ==============================
+        // Pagination
+        // ==============================
+        const limitNum = Number(limit) || 20;
+        const pageNum = Number(page) || 1;
+        const start = (pageNum - 1) * limitNum;
+
+        // ==============================
+        // Step 1 → Only fetch ORDER IDs
+        // ==============================
+        const orderIdQuery = `
+            SELECT DISTINCT business__orders.business_order_id
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
+            ${where}
+            ORDER BY business__orders.business_order_id ${sort_order}
+            LIMIT ?, ?
+        `;
+
+        const [orderIdRows] = await pool.query(orderIdQuery, [...conditionValue, start, limitNum]);
+
+        if (orderIdRows.length === 0) {
+            return res.json({
+                success: true,
+                total_records: 0,
+                total_pages: 0,
+                page: pageNum,
+                next: false,
+                prev: false,
+                data: []
+            });
+        }
+
+        const orderIds = orderIdRows.map(r => r.business_order_id);
+
+        // ==============================
+        // Step 2 → Total Records Count
+        // ==============================
+        const totalQuery = `
+            SELECT COUNT(DISTINCT business__orders.business_order_id) AS total_records
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
+            ${where}
+        `;
+
+        const [[countRow]] = await pool.query(totalQuery, conditionValue);
+
+        const total_records = countRow.total_records;
+        const total_pages = Math.ceil(total_records / limitNum);
+
+        // ==============================
+        // Step 3 → Fetch FULL DATA with items
+        // ==============================
+        const fullDataQuery = `
+            SELECT business__orders.*, business.*, business__salesmans.*,
+                   business__orders_items.*
+            FROM business__orders
+            LEFT JOIN business ON business__orders.business_order_business_id = business.business_id
+            LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id
+            LEFT JOIN business__orders_items ON business__orders.business_order_id = business__orders_items.business_order_id
+            WHERE business__orders.business_order_id IN (${orderIds.join(",")})
+            ORDER BY business__orders.business_order_id ${sort_order}
+        `;
+
+        const [rows] = await pool.query(fullDataQuery);
+
+        // ==============================
+        // Step 4 → Combine Items + Corrected Total
+        // ==============================
+        const ordersMap = {};
+
+        rows.forEach(row => {
+            const id = row.business_order_id;
+
+            if (!ordersMap[id]) {
+                ordersMap[id] = {
+                    ...row,
+                    items: [],
+                    corrected_grand_total: Number(row.business_order_grand_total) || 0
+                };
+            }
+
+            // Add items
+            ordersMap[id].items.push(row);
+
+            // If item returned → subtract amount
+            if (Number(row.item_status) === 4) {
+                const itemTotal = (Number(row.business_order_item_price) || 0)
+                    * (Number(row.business_order_qty) || 0);
+
+                ordersMap[id].corrected_grand_total -= itemTotal;
+            }
+        });
+
+        // ==============================
+        // Step 5 → Stable sorting
+        // ==============================
+        let finalData = Object.values(ordersMap).sort((a, b) => {
+            if (sort_order === "ASC") return a.business_order_id - b.business_order_id;
+            return b.business_order_id - a.business_order_id;
+        });
+
+        finalData = finalData.map(order => ({
+            ...order,
+            display_corrected_grand_total: `AED ${order.corrected_grand_total.toFixed(2)}`
+        }));
+
+        // ==============================
+        // Final Output
+        // ==============================
+        return res.status(200).json({
+            success: true,
+            total_records,
+            total_pages,
+            page: pageNum,
+            next: pageNum < total_pages,
+            prev: pageNum > 1,
+            data: finalData
+        });
 
     } catch (error) {
+        console.error(error);
         return res.status(500).json({
             success: false,
-            message: 'Internal Server Error',
+            message: "Internal Server Error",
             error: error.message
         });
     }
 };
+
 
 exports.AllSalesmanAssignBusinessReport = async (req, res) => {
     try {
