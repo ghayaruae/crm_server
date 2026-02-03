@@ -40,9 +40,6 @@ exports.Login = async (req, res) => {
             [user.business_salesman_id]
         );
 
-        console.log('permissions', permissions);
-
-
         return res.json({
             success: true,
             message: "Login successful",

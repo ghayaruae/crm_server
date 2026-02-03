@@ -8,6 +8,7 @@ router.get("/GetDashboardData", AuthMiddleware.AdminAuth, DashboardController.Ge
 router.get("/GetBusinessesNoRecentOrders", AuthMiddleware.AdminAuth, DashboardController.GetBusinessesNoRecentOrders);
 router.get("/GetMonthlySalesBySalesman", AuthMiddleware.AdminAuth, DashboardController.GetMonthlySalesBySalesman);
 router.get("/GetSalesmanTargetChartData", AuthMiddleware.AdminAuth, DashboardController.GetSalesmanTargetChartData);
+router.get("/GetSalesmanDailySales", AuthMiddleware.AdminAuth, DashboardController.GetSalesmanDailySales);
 
 
 const TeamLeaderDashboardController = require("../Controller/Dashboard/TeamLeaderDashboardController");

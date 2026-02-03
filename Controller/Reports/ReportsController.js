@@ -646,7 +646,12 @@ exports.AllSalesmanAssignBusinessReport = async (req, res) => {
         let [salesmansman] = await pool.query(`SELECT * FROM business__salesmans`);
         const business_salesman_id = salesmansman.map(item => item?.business_salesman_id);
 
-        let query = `SELECT * 
+        let query = `SELECT *,
+        (
+        SELECT COUNT(*) 
+        FROM business__orders 
+        WHERE business_order_business_id = business.business_id
+        ) AS total_orders
         FROM business 
         LEFT JOIN business__salesmans ON business.business_salesman_id = business__salesmans.business_salesman_id 
         `
