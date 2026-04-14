@@ -14,6 +14,7 @@ router.get("/GetInactiveBusinessList", AuthMiddleware.AdminAuth, ReportsControll
 router.get("/GetAllTargetReports", AuthMiddleware.AdminAuth, ReportsController.GetAllTargetReports);
 router.get("/GetAllFollowupsReports", AuthMiddleware.AdminAuth, ReportsController.GetAllFollowupsReports);
 
+router.get("/AllNoRecentOrders", AuthMiddleware.AdminAuth, ReportsController.AllNoRecentOrders);
 
 // salesman reports
 router.get("/AllSalesmanReport", AuthMiddleware.AdminAuth, ReportsController.AllSalesmanReport);

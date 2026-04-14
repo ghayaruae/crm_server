@@ -816,3 +816,118 @@ exports.GetInactiveBusinessList = async (req, res) => {
         return res.json({ success: false, message: "Internal server error", error });
     }
 };
+
+exports.AllNoRecentOrders = async (req, res) => {
+    try {
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        ////////////////////// WHERE //////////////////////
+        let where = `WHERE b.business_salesman_id IS NOT NULL`;
+        let params = [];
+
+        if (req.query.keyword) {
+            where += ` AND b.business_name LIKE ?`;
+            params.push(`%${req.query.keyword}%`);
+        }
+
+        ////////////////////// COUNT //////////////////////
+        const [countRows] = await pool.query(`
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT b.business_id
+                FROM business b
+
+                LEFT JOIN business__orders o 
+                    ON b.business_id = o.business_order_business_id
+
+                LEFT JOIN business__salesmans bs
+                    ON b.business_salesman_id = bs.business_salesman_id
+
+                ${where}
+
+                GROUP BY 
+                    b.business_id,
+                    bs.business_salesmen_name
+
+                HAVING 
+                    MAX(o.business_order_date) IS NULL 
+                    OR MAX(o.business_order_date) < DATE_SUB(CURDATE(), INTERVAL 2 DAY)
+            ) AS filtered
+        `, params);
+
+        const total_records = countRows[0].total;
+        const total_pages = Math.ceil(total_records / limit);
+
+        ////////////////////// MAIN QUERY //////////////////////
+        const [rows] = await pool.query(`
+            SELECT 
+                b.business_id,
+                b.business_name,
+                b.business_contact_number,
+                b.business_email,
+
+                b.business_salesman_id,
+                bs.business_salesmen_name,
+
+                MAX(o.business_order_date) AS last_order_date,
+
+                COUNT(o.business_order_id) AS total_orders,
+
+                CASE 
+                    WHEN MAX(o.business_order_date) IS NULL 
+                        THEN DATEDIFF(CURDATE(), b.business_registered_date)
+                    ELSE 
+                        DATEDIFF(CURDATE(), MAX(o.business_order_date))
+                END AS no_order_since_days
+
+            FROM business b
+
+            LEFT JOIN business__orders o 
+                ON b.business_id = o.business_order_business_id
+
+            LEFT JOIN business__salesmans bs
+                ON b.business_salesman_id = bs.business_salesman_id
+
+            ${where}
+
+            GROUP BY 
+                b.business_id,
+                b.business_name,
+                b.business_contact_number,
+                b.business_email,
+                b.business_salesman_id,
+                bs.business_salesmen_name
+
+            HAVING 
+                last_order_date IS NULL 
+                OR last_order_date < DATE_SUB(CURDATE(), INTERVAL 2 DAY)
+
+            ORDER BY 
+                no_order_since_days DESC,
+                last_order_date ASC
+
+            LIMIT ? OFFSET ?
+        `, [...params, limit, offset]);
+
+        return res.json({
+            success: true,
+            total_records,
+            total_pages,
+            page,
+            next: page < total_pages,
+            prev: page > 1,
+            data: rows
+        });
+
+    } catch (error) {
+        console.log("error", error);
+        return res.json({
+            success: false,
+            message: "Internal server error",
+            error
+        });
+    }
+};

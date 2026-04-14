@@ -140,7 +140,16 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
 
-        // Count total matched businesses
+        ////////////////////// WHERE CONDITIONS //////////////////////
+        let where = `WHERE b.business_salesman_id = ?`;
+        let params = [business_salesman_id];
+
+        if (req.query.keyword) {
+            where += ` AND b.business_name LIKE ?`;
+            params.push(`%${req.query.keyword}%`);
+        }
+
+        ////////////////////// COUNT //////////////////////
         const [countRows] = await pool.query(
             `
             SELECT COUNT(*) AS total
@@ -149,20 +158,20 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
                 FROM business b
                 LEFT JOIN business__orders o 
                     ON b.business_id = o.business_order_business_id
-                WHERE b.business_salesman_id = ?
+                ${where}
                 GROUP BY b.business_id
                 HAVING 
                     MAX(o.business_order_date) IS NULL
                     OR MAX(o.business_order_date) < DATE_SUB(CURDATE(), INTERVAL 2 DAY)
             ) AS filtered
             `,
-            [business_salesman_id]
+            params
         );
 
         const total_records = countRows[0].total;
         const total_pages = Math.ceil(total_records / limit);
 
-        // Fetch businesses + total orders
+        ////////////////////// MAIN QUERY //////////////////////
         const [businesses] = await pool.query(
             `
             SELECT 
@@ -173,10 +182,8 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
 
                 MAX(o.business_order_date) AS last_order_date,
 
-                -- NEW: total orders
                 COUNT(o.business_order_id) AS total_orders,
 
-                -- fallback: days since order/registration
                 CASE 
                     WHEN MAX(o.business_order_date) IS NULL 
                         THEN DATEDIFF(CURDATE(), b.business_registered_date)
@@ -188,7 +195,7 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
             LEFT JOIN business__orders o 
                 ON b.business_id = o.business_order_business_id
 
-            WHERE b.business_salesman_id = ?
+            ${where}
 
             GROUP BY 
                 b.business_id, 
@@ -206,7 +213,7 @@ exports.GetBusinessesNoRecentOrders = async (req, res) => {
 
             LIMIT ? OFFSET ?
             `,
-            [business_salesman_id, limit, offset]
+            [...params, limit, offset]
         );
 
         return res.json({
