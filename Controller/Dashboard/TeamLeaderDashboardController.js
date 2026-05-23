@@ -233,3 +233,29 @@ exports.GetFollowTypeChart = async (req, res) => {
         });
     }
 };
+
+exports.GetLastQuotations = async (req, res) => {
+    try {
+        const query = `
+        SELECT 
+            bq.*, 
+            s.business_salesmen_name
+        FROM business__salesman_quotations bq
+        LEFT JOIN business__salesmans AS s 
+            ON bq.business_salesman_id = s.business_salesman_id
+        ORDER BY bq.quotation_id DESC
+        LIMIT 5
+        `;
+
+        const [rows] = await pool.query(query)
+
+        return res.json({ success: true, data: rows })
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error
+        });
+    }
+}

@@ -16,6 +16,7 @@ router.get("/GetTeamLeaderDashboardStates", AuthMiddleware.AdminAuth, TeamLeader
 router.get("/GetTargetAchievementReport", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetTargetAchievementReport);
 router.get("/GetLastPartInquiries", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetLastPartInquiries);
 router.get("/GetFollowTypeChart", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetFollowTypeChart);
+router.get("/GetLastQuotations", AuthMiddleware.AdminAuth, TeamLeaderDashboardController.GetLastQuotations);
 
 
 module.exports = router;
